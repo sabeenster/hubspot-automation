@@ -1,0 +1,15 @@
+[
+  {
+    "id": "granola_001",
+    "title": "Agentway intro with Mira Goods",
+    "url": "https://app.granola.ai/notes/granola_001",
+    "summary": "Jamie walked through returns exceptions, inbox triage, and manual Shopify-to-sheet reporting.",
+    "meeting_at": "2026-04-29T15:45:00Z",
+    "attendees": [
+      {
+        "name": "Jamie Park",
+        "email": "jamie@example.com"
+      }
+    ]
+  }
+]

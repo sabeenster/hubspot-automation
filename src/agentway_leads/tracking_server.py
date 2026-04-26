@@ -1,0 +1,88 @@
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+from urllib.parse import parse_qs, urlparse
+
+from .database import Database
+from .models import utcnow_iso
+from .webhooks import ingest_hubspot_webhook, verify_hubspot_signature
+
+
+PIXEL_BYTES = (
+    b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!"
+    b"\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01"
+    b"\x00\x00\x02\x02D\x01\x00;"
+)
+
+
+class TrackingHandler(BaseHTTPRequestHandler):
+    db: Database = None  # type: ignore[assignment]
+    base_url: str = ""
+    hubspot_webhook_secret: str = ""
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        query = parse_qs(parsed.query)
+        event_id = query.get("event_id", [""])[0]
+
+        if parsed.path == "/email/open" and event_id:
+            self.db.update_email_event_field(event_id, "opened_at", utcnow_iso())
+            self.send_response(200)
+            self.send_header("Content-Type", "image/gif")
+            self.send_header("Content-Length", str(len(PIXEL_BYTES)))
+            self.end_headers()
+            self.wfile.write(PIXEL_BYTES)
+            return
+
+        if parsed.path == "/r" and event_id:
+            target = query.get("url", [self.base_url])[0]
+            self.db.update_email_event_field(event_id, "clicked_at", utcnow_iso())
+            self.db.update_email_event_field(event_id, "clicked_url", target)
+            self.send_response(302)
+            self.send_header("Location", target)
+            self.end_headers()
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length)
+
+        if parsed.path == "/webhooks/hubspot":
+            signature = self.headers.get("X-HubSpot-Signature-256", "")
+            if not verify_hubspot_signature(body, signature, self.hubspot_webhook_secret):
+                self.send_response(401)
+                self.end_headers()
+                return
+            ingested = ingest_hubspot_webhook(self.db, body)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ingested": ingested}).encode("utf-8"))
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
+
+def serve_tracking(
+    db: Database,
+    base_url: str,
+    hubspot_webhook_secret: str,
+    host: str = "0.0.0.0",
+    port: int = 8080,
+) -> None:
+    handler = type(
+        "BoundTrackingHandler",
+        (TrackingHandler,),
+        {
+            "db": db,
+            "base_url": base_url,
+            "hubspot_webhook_secret": hubspot_webhook_secret,
+        },
+    )
+    server = HTTPServer((host, port), handler)
+    print(f"Tracking server listening on http://{host}:{port}")
+    server.serve_forever()
