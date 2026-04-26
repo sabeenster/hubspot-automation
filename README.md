@@ -100,6 +100,12 @@ python3 -m src.agentway_leads.cli sync-granola --sample-data sample_granola_note
 python3 -m src.agentway_leads.cli weekly-report
 ```
 
+8. Run the full cycle in one command:
+
+```bash
+python3 -m src.agentway_leads.cli sync-all --dry-run
+```
+
 ## Integration notes
 
 This repo is set up so we can connect real services incrementally:
@@ -117,6 +123,54 @@ The service is useful even before every integration is live because the rule eng
 - MailSuite should be treated as a Gmail-native analytics assist, not the only source of truth. This app stores Gmail message IDs, thread IDs, clicks, opens, and replies so analytics are still traceable if MailSuite is used selectively.
 - Granola should be synced on a schedule, not via webhook, because Granola's Personal API currently requires polling for new notes.
 - HubSpot remains the intake and attribution system, but automation decisions live here.
+
+## Railway deployment
+
+This repo is set up to deploy to Railway as a web service:
+
+- `Procfile` and `railway.toml` start the webhook/tracking server
+- Railway should expose the service on `PORT`
+- `GET /healthz` returns a simple health response
+- `POST /webhooks/hubspot` is the HubSpot webhook target
+
+Recommended Railway shape:
+
+1. Web service:
+   runs `python3 -m src.agentway_leads.cli serve-tracking`
+2. Scheduled command:
+   runs `python3 -m src.agentway_leads.cli sync-all`
+
+Recommended Railway environment variables:
+
+- `APP_ENV=production`
+- `BASE_URL=https://your-railway-domain`
+- `TRACKING_BASE_URL=https://your-railway-domain`
+- `HOST=0.0.0.0`
+- `PORT=${{PORT}}`
+- `DATABASE_PATH=/data/agentway_leads.db` if using a mounted volume
+- `HUBSPOT_ACCESS_TOKEN`
+- `HUBSPOT_WEBHOOK_SECRET`
+- `GMAIL_ACCESS_TOKEN`
+- `GMAIL_REFRESH_TOKEN`
+- `GMAIL_CLIENT_ID`
+- `GMAIL_CLIENT_SECRET`
+- `GMAIL_FROM_NAME`
+- `GMAIL_FROM_EMAIL`
+- `GOOGLE_SHEET_ID`
+- `GOOGLE_SERVICE_ACCOUNT_JSON`
+- `GRANOLA_API_KEY`
+- `GRANOLA_API_BASE`
+
+Recommended Railway setup steps:
+
+1. Create a new Railway project from this GitHub repo
+2. Select branch `codex/agentway-lead-automation-v1` or merge it to your main branch first
+3. Add the environment variables above
+4. Add a persistent volume and point `DATABASE_PATH` at it if you want SQLite persistence across deploys
+5. Deploy the web service
+6. Confirm `GET /healthz` works
+7. Point HubSpot webhooks to `https://your-domain/webhooks/hubspot`
+8. Add a Railway scheduled job for `python3 -m src.agentway_leads.cli sync-all`
 
 ## Attribution data
 

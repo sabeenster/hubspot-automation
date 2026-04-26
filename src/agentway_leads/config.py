@@ -8,6 +8,8 @@ class Settings:
     database_path: str = os.getenv("DATABASE_PATH", "./agentway_leads.db")
     base_url: str = os.getenv("BASE_URL", "https://agentway.ai")
     tracking_base_url: str = os.getenv("TRACKING_BASE_URL", "http://localhost:8080")
+    host: str = os.getenv("HOST", "0.0.0.0")
+    port: int = int(os.getenv("PORT", "8080"))
     gmail_from_name: str = os.getenv("GMAIL_FROM_NAME", "Sabeen")
     gmail_from_email: str = os.getenv("GMAIL_FROM_EMAIL", "sabeen@agentway.com")
     hubspot_access_token: str = os.getenv("HUBSPOT_ACCESS_TOKEN", "")

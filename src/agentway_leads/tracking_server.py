@@ -24,6 +24,13 @@ class TrackingHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed.query)
         event_id = query.get("event_id", [""])[0]
 
+        if parsed.path in {"/", "/healthz"}:
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True}).encode("utf-8"))
+            return
+
         if parsed.path == "/email/open" and event_id:
             self.db.update_email_event_field(event_id, "opened_at", utcnow_iso())
             self.send_response(200)

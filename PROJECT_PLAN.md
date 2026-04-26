@@ -24,20 +24,20 @@ Completed:
 - Granola note sync and lead linkage added
 - HubSpot attribution fields expanded for future ad-aware personalization
 - Local git repo initialized and connected to `https://github.com/sabeenster/hubspot-automation.git`
+- Railway deployment config added for a hosted webhook/tracking service
 
 In progress:
 
-- Replace placeholder Google Sheets sync with real tab updates
 - Tighten live integration behavior and setup docs
-- Commit and push build progress into the GitHub repo
+- Deploy to Railway and document service/cron setup
 
 Next:
 
-1. Implement real Google Sheets sync for `Leads`, `Email Events`, and `Meeting Notes`
-2. Add reply detection path from Gmail thread IDs
-3. Improve HubSpot webhook ingestion for real payload variants
-4. Document deployment and auth steps
-5. Push to GitHub repo
+1. Add reply detection path from Gmail thread IDs
+2. Improve HubSpot webhook ingestion for real payload variants
+3. Document deployment and auth steps
+4. Deploy to Railway and verify live health/webhook routes
+5. Add scheduled Railway job for `sync-all`
 
 ## Important design decisions
 
@@ -53,4 +53,3 @@ Next:
 - The intended GitHub remote is `origin = sabeenster/hubspot-automation`.
 - Do not use the unrelated parent repo rooted at `/Users/sabeen`.
 - If pushing fails, the user may need to complete GitHub auth in the web UI.
-

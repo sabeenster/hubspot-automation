@@ -30,11 +30,17 @@ def build_parser() -> argparse.ArgumentParser:
     automation_parser = subparsers.add_parser("run-automations")
     automation_parser.add_argument("--dry-run", action="store_true")
 
+    sync_all_parser = subparsers.add_parser("sync-all")
+    sync_all_parser.add_argument("--dry-run", action="store_true")
+    sync_all_parser.add_argument("--hubspot-sample-data", help="Path to sample HubSpot JSON")
+    sync_all_parser.add_argument("--granola-sample-data", help="Path to sample Granola JSON")
+    sync_all_parser.add_argument("--skip-sheets", action="store_true")
+
     subparsers.add_parser("weekly-report")
 
     track_parser = subparsers.add_parser("serve-tracking")
-    track_parser.add_argument("--host", default="0.0.0.0")
-    track_parser.add_argument("--port", type=int, default=8080)
+    track_parser.add_argument("--host")
+    track_parser.add_argument("--port", type=int)
 
     subparsers.add_parser("sync-sheets")
     return parser
@@ -88,6 +94,54 @@ def main() -> None:
         print(f"Evaluated {len(decisions)} automations and sent {len(sent)} emails")
         return
 
+    if args.command == "sync-all":
+        db.init_db()
+
+        hubspot_client = HubSpotClient(settings.hubspot_access_token)
+        contacts = (
+            hubspot_client.load_sample_contacts(args.hubspot_sample_data)
+            if args.hubspot_sample_data
+            else hubspot_client.fetch_recent_contacts(limit=100)
+        )
+        leads = [
+            contact_to_lead(contact)
+            for contact in contacts
+            if contact.get("properties", {}).get("email")
+        ]
+        for lead in leads:
+            db.upsert_lead(lead)
+
+        granola_client = GranolaClient(settings.granola_api_key, settings.granola_api_base)
+        notes = (
+            granola_client.load_sample_notes(args.granola_sample_data)
+            if args.granola_sample_data
+            else granola_client.fetch_notes()
+        )
+        linked = sync_granola_notes(db, notes)
+
+        gmail = GmailClient(
+            access_token=settings.gmail_access_token,
+            from_name=settings.gmail_from_name,
+            from_email=settings.gmail_from_email,
+        )
+        decisions = determine_automations(db.get_leads())
+        sent = execute_automations(db, gmail, decisions, dry_run=args.dry_run)
+
+        if not args.skip_sheets:
+            sync = GoogleSheetsSync(
+                sheet_id=settings.google_sheet_id,
+                service_account_json=settings.google_service_account_json,
+            )
+            sync.push_leads(db.get_leads())
+            sync.push_email_events(db.get_email_events())
+            sync.push_meeting_notes(db.get_meeting_notes())
+
+        print(
+            "Sync complete: "
+            f"{len(leads)} leads, {linked} meeting notes, {len(decisions)} automations, {len(sent)} emails"
+        )
+        return
+
     if args.command == "weekly-report":
         db.init_db()
         report = generate_weekly_report(db)
@@ -100,8 +154,8 @@ def main() -> None:
             db,
             settings.base_url,
             settings.hubspot_webhook_secret,
-            host=args.host,
-            port=args.port,
+            host=args.host or settings.host,
+            port=args.port or settings.port,
         )
         return
 
