@@ -5,6 +5,7 @@
     "subject": "Thanks for reaching out",
     "body": "Hi {{first_name}},\n\nThanks for reaching out and for your interest in Agentway.\n\nWe help consumer brands automate the manual back-office work that usually lives across spreadsheets, inboxes, ERPs, order systems, CX tools, and finance workflows.\n\nI’ll send occasional notes on what we’re seeing across ecommerce ops, AI automation, and the workflows brands are still doing manually.\n\nBest,\nSabeen",
     "delay_days": 0,
+    "delay_minutes": 10,
     "active": true
   },
   {
@@ -13,6 +14,7 @@
     "subject": "Looking forward to connecting",
     "body": "Hi {{first_name}},\n\nThanks for booking time. Looking forward to learning more about what your team is doing manually today and where Agentway may be useful.\n\nThe most helpful thing for our call is usually a quick walkthrough of one workflow your team still handles by hand — spreadsheets, inboxes, order entry, reporting, CX exceptions, ERP updates, anything like that.\n\nSee you soon,\nSabeen",
     "delay_days": 0,
+    "delay_minutes": 30,
     "active": true
   },
   {
@@ -21,6 +23,7 @@
     "subject": "Great connecting",
     "body": "Hi {{first_name}},\n\nGreat connecting today. I enjoyed learning more about how your team is handling {{workflow_area}}.\n\nAs discussed, the easiest next step is usually a short screen share of the manual process so we can understand the workflow, the systems involved, and where automation could create the most leverage.\n\nFrom there, we can usually put together a lightweight prototype pretty quickly.\n\nBest,\nSabeen",
     "delay_days": 0,
+    "delay_minutes": 0,
     "active": true
   }
 ]

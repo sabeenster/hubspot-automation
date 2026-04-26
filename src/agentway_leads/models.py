@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict
 
 
@@ -54,6 +54,7 @@ class Template:
     subject: str
     body: str
     delay_days: int = 0
+    delay_minutes: int = 0
     active: bool = True
 
 
@@ -99,3 +100,15 @@ class AutomationDecision:
 
 def utcnow_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+
+def parse_iso_datetime(value: str) -> datetime:
+    normalized = (value or "").strip()
+    if not normalized:
+        return datetime.now(timezone.utc)
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)

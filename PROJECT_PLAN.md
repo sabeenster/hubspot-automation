@@ -37,6 +37,9 @@ Completed:
   - `RESEND_API_KEY`
   - `RESEND_FROM_EMAIL`
   - `RESEND_REPLY_TO_EMAIL`
+- lead-type-specific confirmation timing established:
+  - email/newsletter/contact leads: 10 minutes
+  - demo bookings: 30 minutes
 
 In progress:
 

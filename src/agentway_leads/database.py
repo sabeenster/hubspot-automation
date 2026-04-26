@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS templates (
     subject TEXT NOT NULL,
     body TEXT NOT NULL,
     delay_days INTEGER DEFAULT 0,
+    delay_minutes INTEGER DEFAULT 0,
     active INTEGER DEFAULT 1
 );
 
@@ -108,6 +109,10 @@ EMAIL_EVENT_COLUMN_MIGRATIONS = {
     "provider_message_id": "ALTER TABLE email_events ADD COLUMN provider_message_id TEXT",
 }
 
+TEMPLATE_COLUMN_MIGRATIONS = {
+    "delay_minutes": "ALTER TABLE templates ADD COLUMN delay_minutes INTEGER DEFAULT 0",
+}
+
 
 class Database:
     def __init__(self, path: str):
@@ -124,6 +129,7 @@ class Database:
             conn.executescript(SCHEMA)
             self._migrate_leads_table(conn)
             self._migrate_email_events_table(conn)
+            self._migrate_templates_table(conn)
 
     def _migrate_leads_table(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(leads)").fetchall()
@@ -153,6 +159,20 @@ class Database:
                     if "duplicate column name" not in str(exc).lower():
                         raise
 
+    def _migrate_templates_table(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("PRAGMA table_info(templates)").fetchall()
+        existing_columns = {
+            row["name"] if isinstance(row, sqlite3.Row) else row[1]
+            for row in rows
+        }
+        for column_name, sql in TEMPLATE_COLUMN_MIGRATIONS.items():
+            if column_name not in existing_columns:
+                try:
+                    conn.execute(sql)
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column name" not in str(exc).lower():
+                        raise
+
     def upsert_lead(self, lead: Lead) -> None:
         values = lead.__dict__
         columns = ", ".join(values.keys())
@@ -174,6 +194,7 @@ class Database:
             "subject": template.subject,
             "body": template.body,
             "delay_days": template.delay_days,
+            "delay_minutes": template.delay_minutes,
             "active": 1 if template.active else 0,
         }
         columns = ", ".join(values.keys())
@@ -258,6 +279,7 @@ class Database:
                 subject=row["subject"],
                 body=row["body"],
                 delay_days=row["delay_days"],
+                delay_minutes=row["delay_minutes"],
                 active=bool(row["active"]),
             )
             for row in rows
@@ -276,6 +298,7 @@ class Database:
             subject=row["subject"],
             body=row["body"],
             delay_days=row["delay_days"],
+            delay_minutes=row["delay_minutes"],
             active=bool(row["active"]),
         )
 

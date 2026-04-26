@@ -1,9 +1,10 @@
 import uuid
+from datetime import timedelta
 from typing import List
 
 from .database import Database
 from .email_sender import ResendEmailClient
-from .models import AutomationDecision, EmailEvent, Lead, utcnow_iso
+from .models import AutomationDecision, EmailEvent, Lead, Template, parse_iso_datetime, utcnow_iso
 from .templates import render_template
 
 
@@ -21,7 +22,7 @@ def determine_automations(leads: List[Lead]) -> List[AutomationDecision]:
                 AutomationDecision(
                     lead_id=lead.lead_id,
                     template_name="newsletter_confirmation",
-                    reason="new lead confirmation",
+                    reason="new lead confirmation after delay",
                     context={"first_name": lead.first_name or "there"},
                 )
             )
@@ -30,7 +31,7 @@ def determine_automations(leads: List[Lead]) -> List[AutomationDecision]:
                 AutomationDecision(
                     lead_id=lead.lead_id,
                     template_name="demo_booking_confirmation",
-                    reason="demo booked confirmation",
+                    reason="demo booked confirmation after delay",
                     context={"first_name": lead.first_name or "there"},
                 )
             )
@@ -61,6 +62,8 @@ def execute_automations(
         template = db.get_template(decision.template_name)
         if not lead or not template:
             continue
+        if not is_due_to_send(lead, template):
+            continue
         subject = render_template(template.subject, decision.context)
         body = render_template(template.body, decision.context)
         email_event_id = str(uuid.uuid4())
@@ -87,6 +90,19 @@ def execute_automations(
         update_lead_after_send(db, lead, template.template_name)
         sent.append(event)
     return sent
+
+
+def is_due_to_send(lead: Lead, template: Template) -> bool:
+    now = parse_iso_datetime(utcnow_iso())
+    anchor = scheduled_from_timestamp(lead, template)
+    delay = timedelta(days=template.delay_days, minutes=template.delay_minutes)
+    return now >= anchor + delay
+
+
+def scheduled_from_timestamp(lead: Lead, template: Template):
+    if template.template_name == "demo_booking_confirmation" and lead.demo_booked_date:
+        return parse_iso_datetime(lead.demo_booked_date)
+    return parse_iso_datetime(lead.created_at)
 
 
 def update_lead_after_send(db: Database, lead: Lead, template_name: str) -> None:

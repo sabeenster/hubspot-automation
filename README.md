@@ -22,6 +22,9 @@ It keeps HubSpot as the CRM of record while running automation logic outside Hub
   - demo booking confirmation
   - post-demo follow-up
   - manual status-driven next actions
+- Confirmation timing defaults:
+  - newsletter/contact/email leads: 10 minutes
+  - demo bookings: 30 minutes
 - A tiny tracking server for open pixels and click redirects.
 - A webhook endpoint for HubSpot contact events.
 - A Granola sync flow for linking meeting notes to known leads by attendee email.
@@ -105,6 +108,12 @@ python3 -m src.agentway_leads.cli weekly-report
 ```bash
 python3 -m src.agentway_leads.cli sync-all --dry-run
 ```
+
+The default timing behavior is:
+
+- email/newsletter/contact leads receive confirmation after 10 minutes
+- demo bookings receive confirmation after 30 minutes
+- post-demo follow-up remains status-driven
 
 ## Integration notes
 

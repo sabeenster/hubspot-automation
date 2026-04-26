@@ -2,7 +2,7 @@
   {
     "id": "hs_001",
     "properties": {
-      "createdate": "2026-04-26T12:00:00Z",
+      "createdate": "2026-04-26T09:00:00Z",
       "firstname": "Avery",
       "lastname": "Stone",
       "email": "avery@example.com",
@@ -22,7 +22,7 @@
   {
     "id": "hs_002",
     "properties": {
-      "createdate": "2026-04-26T12:10:00Z",
+      "createdate": "2026-04-26T09:05:00Z",
       "firstname": "Jamie",
       "lastname": "Park",
       "email": "jamie@example.com",
@@ -34,7 +34,7 @@
       "utm_campaign": "demo",
       "utm_medium": "organic",
       "utm_content": "homepage",
-      "demo_booked_date": "2026-04-29T15:00:00Z",
+      "demo_booked_date": "2026-04-26T09:10:00Z",
       "hs_latest_source": "DIRECT_TRAFFIC",
       "hs_latest_source_data_1": "agentway.ai/demo"
     }
