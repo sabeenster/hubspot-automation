@@ -7,7 +7,7 @@ It keeps HubSpot as the CRM of record while running automation logic outside Hub
 - HubSpot provides contacts, demo submissions, and attribution data.
 - HubSpot attribution is preserved deeply enough to support future ad-aware personalization.
 - Local rule evaluation decides which email should be sent next.
-- Gmail is the delivery channel.
+- Resend is the delivery channel.
 - Google Sheets is the visibility layer for operators.
 - Granola meeting notes can be linked back to leads after customer calls.
 - Tracking endpoints record opens and clicks.
@@ -44,7 +44,7 @@ src/agentway_leads/
   cli.py
   config.py
   database.py
-  gmail.py
+  email_sender.py
   granola.py
   hubspot.py
   models.py
@@ -111,7 +111,7 @@ python3 -m src.agentway_leads.cli sync-all --dry-run
 This repo is set up so we can connect real services incrementally:
 
 - `hubspot.py`: fetch contacts or form submissions from HubSpot, including ad and source attribution fields.
-- `gmail.py`: send transactional or newsletter emails via Gmail API and store Gmail thread IDs.
+- `email_sender.py`: send transactional or newsletter emails via Resend using Railway-friendly env vars.
 - `sheets.py`: mirror state into a Google Sheet for operator visibility.
 - `tracking_server.py`: record opens and clicks for outbound emails and accept HubSpot webhooks.
 - `granola.py`: poll Granola notes and link them to leads by attendee email.
@@ -120,7 +120,7 @@ The service is useful even before every integration is live because the rule eng
 
 ## Practical integration decisions
 
-- MailSuite should be treated as a Gmail-native analytics assist, not the only source of truth. This app stores Gmail message IDs, thread IDs, clicks, opens, and replies so analytics are still traceable if MailSuite is used selectively.
+- MailSuite can still be used as a useful inbox-side assist, but outbound delivery now runs through Resend so Railway-managed API credentials match the rest of your agents.
 - Granola should be synced on a schedule, not via webhook, because Granola's Personal API currently requires polling for new notes.
 - HubSpot remains the intake and attribution system, but automation decisions live here.
 
@@ -150,12 +150,12 @@ Recommended Railway environment variables:
 - `DATABASE_PATH=/data/agentway_leads.db` if using a mounted volume
 - `HUBSPOT_ACCESS_TOKEN`
 - `HUBSPOT_WEBHOOK_SECRET`
-- `GMAIL_ACCESS_TOKEN`
-- `GMAIL_REFRESH_TOKEN`
-- `GMAIL_CLIENT_ID`
-- `GMAIL_CLIENT_SECRET`
-- `GMAIL_FROM_NAME`
-- `GMAIL_FROM_EMAIL`
+- `EMAIL_PROVIDER=resend`
+- `EMAIL_FROM_NAME`
+- `EMAIL_FROM_EMAIL`
+- `RESEND_API_KEY`
+- `RESEND_FROM_EMAIL`
+- `RESEND_REPLY_TO_EMAIL`
 - `GOOGLE_SHEET_ID`
 - `GOOGLE_SERVICE_ACCOUNT_JSON`
 - `GRANOLA_API_KEY`

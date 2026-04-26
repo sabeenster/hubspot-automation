@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS email_events (
     template_name TEXT NOT NULL,
     subject TEXT NOT NULL,
     sent_at TEXT NOT NULL,
+    email_provider TEXT,
+    provider_message_id TEXT,
     gmail_message_id TEXT,
     gmail_thread_id TEXT,
     opened_at TEXT,
@@ -101,6 +103,11 @@ LEAD_COLUMN_MIGRATIONS = {
     "granola_note_summary": "ALTER TABLE leads ADD COLUMN granola_note_summary TEXT",
 }
 
+EMAIL_EVENT_COLUMN_MIGRATIONS = {
+    "email_provider": "ALTER TABLE email_events ADD COLUMN email_provider TEXT",
+    "provider_message_id": "ALTER TABLE email_events ADD COLUMN provider_message_id TEXT",
+}
+
 
 class Database:
     def __init__(self, path: str):
@@ -116,6 +123,7 @@ class Database:
         with self.connect() as conn:
             conn.executescript(SCHEMA)
             self._migrate_leads_table(conn)
+            self._migrate_email_events_table(conn)
 
     def _migrate_leads_table(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(leads)").fetchall()
@@ -124,6 +132,20 @@ class Database:
             for row in rows
         }
         for column_name, sql in LEAD_COLUMN_MIGRATIONS.items():
+            if column_name not in existing_columns:
+                try:
+                    conn.execute(sql)
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column name" not in str(exc).lower():
+                        raise
+
+    def _migrate_email_events_table(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("PRAGMA table_info(email_events)").fetchall()
+        existing_columns = {
+            row["name"] if isinstance(row, sqlite3.Row) else row[1]
+            for row in rows
+        }
+        for column_name, sql in EMAIL_EVENT_COLUMN_MIGRATIONS.items():
             if column_name not in existing_columns:
                 try:
                     conn.execute(sql)
@@ -196,6 +218,8 @@ class Database:
             "clicked_url",
             "gmail_message_id",
             "gmail_thread_id",
+            "email_provider",
+            "provider_message_id",
             "unsubscribe_clicked",
             "bounced",
         }:

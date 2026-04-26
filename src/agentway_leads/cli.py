@@ -5,7 +5,7 @@ from pathlib import Path
 from .automation import determine_automations, execute_automations
 from .config import get_settings
 from .database import Database
-from .gmail import GmailClient
+from .email_sender import ResendEmailClient
 from .granola import GranolaClient, sync_granola_notes
 from .hubspot import HubSpotClient, contact_to_lead
 from .reporting import generate_weekly_report
@@ -84,13 +84,15 @@ def main() -> None:
 
     if args.command == "run-automations":
         db.init_db()
-        gmail = GmailClient(
-            access_token=settings.gmail_access_token,
-            from_name=settings.gmail_from_name,
-            from_email=settings.gmail_from_email,
+        email_client = ResendEmailClient(
+            api_key=settings.resend_api_key,
+            from_name=settings.email_from_name,
+            from_email=settings.resend_from_email or settings.email_from_email,
+            tracking_base_url=settings.tracking_base_url,
+            reply_to_email=settings.resend_reply_to_email,
         )
         decisions = determine_automations(db.get_leads())
-        sent = execute_automations(db, gmail, decisions, dry_run=args.dry_run)
+        sent = execute_automations(db, email_client, decisions, dry_run=args.dry_run)
         print(f"Evaluated {len(decisions)} automations and sent {len(sent)} emails")
         return
 
@@ -119,13 +121,15 @@ def main() -> None:
         )
         linked = sync_granola_notes(db, notes)
 
-        gmail = GmailClient(
-            access_token=settings.gmail_access_token,
-            from_name=settings.gmail_from_name,
-            from_email=settings.gmail_from_email,
+        email_client = ResendEmailClient(
+            api_key=settings.resend_api_key,
+            from_name=settings.email_from_name,
+            from_email=settings.resend_from_email or settings.email_from_email,
+            tracking_base_url=settings.tracking_base_url,
+            reply_to_email=settings.resend_reply_to_email,
         )
         decisions = determine_automations(db.get_leads())
-        sent = execute_automations(db, gmail, decisions, dry_run=args.dry_run)
+        sent = execute_automations(db, email_client, decisions, dry_run=args.dry_run)
 
         if not args.skip_sheets:
             sync = GoogleSheetsSync(

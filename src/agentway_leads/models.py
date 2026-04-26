@@ -65,6 +65,8 @@ class EmailEvent:
     template_name: str
     subject: str
     sent_at: str
+    email_provider: str = "resend"
+    provider_message_id: str = ""
     gmail_message_id: str = ""
     gmail_thread_id: str = ""
     opened_at: str = ""

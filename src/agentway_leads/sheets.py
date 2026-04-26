@@ -59,6 +59,8 @@ EMAIL_EVENTS_HEADERS = [
     "template_name",
     "subject",
     "sent_at",
+    "email_provider",
+    "provider_message_id",
     "gmail_message_id",
     "gmail_thread_id",
     "opened_at",

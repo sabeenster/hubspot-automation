@@ -2,7 +2,7 @@ import uuid
 from typing import List
 
 from .database import Database
-from .gmail import GmailClient
+from .email_sender import ResendEmailClient
 from .models import AutomationDecision, EmailEvent, Lead, utcnow_iso
 from .templates import render_template
 
@@ -51,7 +51,7 @@ def determine_automations(leads: List[Lead]) -> List[AutomationDecision]:
 
 def execute_automations(
     db: Database,
-    gmail: GmailClient,
+    email_client: ResendEmailClient,
     decisions: List[AutomationDecision],
     dry_run: bool = False,
 ) -> List[EmailEvent]:
@@ -63,14 +63,23 @@ def execute_automations(
             continue
         subject = render_template(template.subject, decision.context)
         body = render_template(template.body, decision.context)
-        response = gmail.send_email(lead.email, subject, body, dry_run=dry_run)
+        email_event_id = str(uuid.uuid4())
+        response = email_client.send_email(
+            lead.email,
+            subject,
+            body,
+            event_id=email_event_id,
+            dry_run=dry_run,
+        )
         event = EmailEvent(
-            email_event_id=str(uuid.uuid4()),
+            email_event_id=email_event_id,
             lead_id=lead.lead_id,
             email=lead.email,
             template_name=template.template_name,
             subject=subject,
             sent_at=utcnow_iso(),
+            email_provider=response.get("provider", "resend"),
+            provider_message_id=response.get("id", ""),
             gmail_message_id=response.get("id", ""),
             gmail_thread_id=response.get("threadId", ""),
         )
