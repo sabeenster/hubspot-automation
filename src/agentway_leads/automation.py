@@ -64,32 +64,70 @@ def execute_automations(
             continue
         if not is_due_to_send(lead, template):
             continue
-        subject = render_template(template.subject, decision.context)
-        body = render_template(template.body, decision.context)
-        email_event_id = str(uuid.uuid4())
-        response = email_client.send_email(
-            lead.email,
-            subject,
-            body,
-            event_id=email_event_id,
+        event = send_template_to_lead(
+            db,
+            email_client,
+            lead,
+            template,
+            decision.context,
             dry_run=dry_run,
         )
-        event = EmailEvent(
-            email_event_id=email_event_id,
-            lead_id=lead.lead_id,
-            email=lead.email,
-            template_name=template.template_name,
-            subject=subject,
-            sent_at=utcnow_iso(),
-            email_provider=response.get("provider", "resend"),
-            provider_message_id=response.get("id", ""),
-            gmail_message_id=response.get("id", ""),
-            gmail_thread_id=response.get("threadId", ""),
-        )
-        db.insert_email_event(event)
-        update_lead_after_send(db, lead, template.template_name)
         sent.append(event)
     return sent
+
+
+def send_confirmation_for_lead(
+    db: Database,
+    email_client: ResendEmailClient,
+    lead_id: str,
+    dry_run: bool = False,
+) -> EmailEvent:
+    lead = db.get_lead_by_id(lead_id)
+    if not lead:
+        raise ValueError("Lead not found")
+    template_name = recommended_confirmation_template_name(lead)
+    if not template_name:
+        raise ValueError("No confirmation template for this lead")
+    template = db.get_template(template_name)
+    if not template:
+        raise ValueError("Template not found")
+    context = {"first_name": lead.first_name or "there"}
+    return send_template_to_lead(db, email_client, lead, template, context, dry_run=dry_run)
+
+
+def send_template_to_lead(
+    db: Database,
+    email_client: ResendEmailClient,
+    lead: Lead,
+    template: Template,
+    context: dict,
+    dry_run: bool = False,
+) -> EmailEvent:
+    subject = render_template(template.subject, context)
+    body = render_template(template.body, context)
+    email_event_id = str(uuid.uuid4())
+    response = email_client.send_email(
+        lead.email,
+        subject,
+        body,
+        event_id=email_event_id,
+        dry_run=dry_run,
+    )
+    event = EmailEvent(
+        email_event_id=email_event_id,
+        lead_id=lead.lead_id,
+        email=lead.email,
+        template_name=template.template_name,
+        subject=subject,
+        sent_at=utcnow_iso(),
+        email_provider=response.get("provider", "resend"),
+        provider_message_id=response.get("id", ""),
+        gmail_message_id=response.get("id", ""),
+        gmail_thread_id=response.get("threadId", ""),
+    )
+    db.insert_email_event(event)
+    update_lead_after_send(db, lead, template.template_name)
+    return event
 
 
 def is_due_to_send(lead: Lead, template: Template) -> bool:
@@ -103,6 +141,14 @@ def scheduled_from_timestamp(lead: Lead, template: Template):
     if template.template_name == "demo_booking_confirmation" and lead.demo_booked_date:
         return parse_iso_datetime(lead.demo_booked_date)
     return parse_iso_datetime(lead.created_at)
+
+
+def recommended_confirmation_template_name(lead: Lead) -> str:
+    if lead.lead_type in {"newsletter_signup", "contact_form"}:
+        return "newsletter_confirmation"
+    if lead.lead_type == "demo_request":
+        return "demo_booking_confirmation"
+    return ""
 
 
 def update_lead_after_send(db: Database, lead: Lead, template_name: str) -> None:

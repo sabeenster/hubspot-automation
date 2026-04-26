@@ -285,6 +285,9 @@ class Database:
             for row in rows
         ]
 
+    def get_template_by_name(self, template_name: str) -> Optional[Template]:
+        return self.get_template(template_name)
+
     def get_template(self, template_name: str) -> Optional[Template]:
         with self.connect() as conn:
             row = conn.execute(
@@ -320,3 +323,10 @@ class Database:
                 "SELECT * FROM meeting_notes ORDER BY meeting_at DESC"
             ).fetchall()
         return [MeetingNote(**dict(row)) for row in rows]
+
+    def update_template_delay(self, template_name: str, delay_days: int, delay_minutes: int) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE templates SET delay_days = ?, delay_minutes = ? WHERE template_name = ?",
+                (delay_days, delay_minutes, template_name),
+            )

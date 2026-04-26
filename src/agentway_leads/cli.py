@@ -154,10 +154,19 @@ def main() -> None:
 
     if args.command == "serve-tracking":
         db.init_db()
+        email_client = ResendEmailClient(
+            api_key=settings.resend_api_key,
+            from_name=settings.email_from_name,
+            from_email=settings.resend_from_email or settings.email_from_email,
+            tracking_base_url=settings.tracking_base_url,
+            reply_to_email=settings.resend_reply_to_email,
+        )
         serve_tracking(
             db,
             settings.base_url,
             settings.hubspot_webhook_secret,
+            email_client,
+            settings.admin_token,
             host=args.host or settings.host,
             port=args.port or settings.port,
         )

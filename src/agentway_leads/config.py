@@ -16,6 +16,7 @@ class Settings:
     resend_api_key: str = os.getenv("RESEND_API_KEY", "")
     resend_from_email: str = os.getenv("RESEND_FROM_EMAIL", "")
     resend_reply_to_email: str = os.getenv("RESEND_REPLY_TO_EMAIL", "")
+    admin_token: str = os.getenv("ADMIN_TOKEN", "")
     hubspot_access_token: str = os.getenv("HUBSPOT_ACCESS_TOKEN", "")
     hubspot_portal_id: str = os.getenv("HUBSPOT_PORTAL_ID", "")
     google_sheet_id: str = os.getenv("GOOGLE_SHEET_ID", "")

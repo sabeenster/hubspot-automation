@@ -1,0 +1,351 @@
+from datetime import timedelta
+from html import escape
+from typing import List
+
+from .automation import is_due_to_send, recommended_confirmation_template_name, scheduled_from_timestamp
+from .models import Lead, Template
+
+
+def render_admin_page(
+    leads: List[Lead],
+    templates: List[Template],
+    flash_message: str = "",
+    admin_token: str = "",
+) -> str:
+    template_rows = "\n".join(render_template_row(template, admin_token) for template in templates)
+    lead_rows = "\n".join(render_lead_row(lead, templates, admin_token) for lead in leads[:50])
+    flash_html = (
+        f'<div class="flash">{escape(flash_message)}</div>' if flash_message else ""
+    )
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agentway Automation Admin</title>
+  <style>
+    :root {{
+      --bg: #f4efe7;
+      --card: #fffaf4;
+      --ink: #1f1a17;
+      --muted: #6f655f;
+      --line: #dbcfc4;
+      --accent: #0f766e;
+      --accent-2: #b45309;
+      --danger: #9f1239;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+      background:
+        radial-gradient(circle at top left, rgba(180,83,9,0.08), transparent 28%),
+        linear-gradient(180deg, #f8f4ed 0%, var(--bg) 100%);
+      color: var(--ink);
+    }}
+    .wrap {{
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }}
+    .hero {{
+      display: grid;
+      gap: 14px;
+      margin-bottom: 24px;
+    }}
+    .eyebrow {{
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    h1 {{
+      margin: 0;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 0.95;
+      font-weight: 700;
+    }}
+    .subtitle {{
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.5;
+      margin: 0;
+    }}
+    .flash {{
+      margin: 18px 0 0;
+      padding: 14px 16px;
+      border: 1px solid rgba(15,118,110,0.22);
+      background: rgba(15,118,110,0.08);
+      color: var(--accent);
+      border-radius: 16px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    .grid {{
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      gap: 22px;
+      align-items: start;
+    }}
+    .card {{
+      background: rgba(255,250,244,0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: 0 18px 60px rgba(31,26,23,0.06);
+      overflow: hidden;
+    }}
+    .card h2 {{
+      margin: 0;
+      padding: 22px 22px 8px;
+      font-size: 22px;
+    }}
+    .card-copy {{
+      margin: 0;
+      padding: 0 22px 18px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.5;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    .template-stack {{
+      display: grid;
+      gap: 14px;
+      padding: 0 16px 18px;
+    }}
+    .template-row {{
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      background: #fffdf9;
+      display: grid;
+      gap: 12px;
+    }}
+    .template-row strong {{
+      display: block;
+      font-size: 16px;
+    }}
+    .meta {{
+      color: var(--muted);
+      font-size: 13px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    .inputs {{
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+      align-items: end;
+    }}
+    label {{
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    input, select, button {{
+      font: inherit;
+    }}
+    input[type="number"], input[type="password"], select {{
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 11px 12px;
+      background: white;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    button {{
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 16px;
+      background: var(--ink);
+      color: white;
+      cursor: pointer;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      font-weight: 700;
+    }}
+    button.secondary {{
+      background: white;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }}
+    .leads {{
+      padding: 0 16px 18px;
+      display: grid;
+      gap: 14px;
+    }}
+    .lead-row {{
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(255,248,240,0.95));
+      display: grid;
+      gap: 14px;
+    }}
+    .lead-top {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+    }}
+    .lead-name {{
+      font-size: 24px;
+      line-height: 1;
+      margin-bottom: 6px;
+    }}
+    .lead-email {{
+      color: var(--muted);
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    .badge {{
+      white-space: nowrap;
+      border-radius: 999px;
+      padding: 8px 10px;
+      background: rgba(180,83,9,0.1);
+      color: var(--accent-2);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    .facts {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      color: var(--muted);
+      font-size: 13px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    .facts span strong {{
+      color: var(--ink);
+      font-weight: 700;
+    }}
+    .actions {{
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: end;
+    }}
+    .hint {{
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    .empty {{
+      padding: 22px;
+      color: var(--muted);
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    @media (max-width: 980px) {{
+      .grid {{ grid-template-columns: 1fr; }}
+      .inputs, .actions {{ grid-template-columns: 1fr; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="eyebrow">Agentway Ops Console</div>
+      <h1>Confirm leads on your terms.</h1>
+      <p class="subtitle">Force-send a confirmation to any lead, and adjust the timing windows that govern automated follow-up as this flow gets more sophisticated.</p>
+      {flash_html}
+    </section>
+    <section class="grid">
+      <article class="card">
+        <h2>Delay Settings</h2>
+        <p class="card-copy">These template delays control when automation is allowed to send. Update them here so you do not need a code change every time cadence shifts.</p>
+        <div class="template-stack">
+          {template_rows or '<div class="empty">No templates available.</div>'}
+        </div>
+      </article>
+      <article class="card">
+        <h2>Lead Confirmations</h2>
+        <p class="card-copy">Use force send for a one-off manual confirmation, even if the normal delay window has not elapsed yet.</p>
+        <div class="leads">
+          {lead_rows or '<div class="empty">No leads found yet.</div>'}
+        </div>
+      </article>
+    </section>
+  </div>
+</body>
+</html>"""
+
+
+def render_template_row(template: Template, admin_token: str) -> str:
+    hidden = render_hidden_token(admin_token)
+    return f"""
+    <form class="template-row" method="post" action="/admin/templates">
+      {hidden}
+      <input type="hidden" name="template_name" value="{escape(template.template_name)}" />
+      <div>
+        <strong>{escape(template.template_name)}</strong>
+        <div class="meta">Lead type: {escape(template.lead_type)} | Current delay: {template.delay_days} days, {template.delay_minutes} minutes</div>
+      </div>
+      <div class="inputs">
+        <label>Delay Days
+          <input type="number" name="delay_days" min="0" value="{template.delay_days}" />
+        </label>
+        <label>Delay Minutes
+          <input type="number" name="delay_minutes" min="0" value="{template.delay_minutes}" />
+        </label>
+        <button type="submit">Save Delay</button>
+      </div>
+    </form>
+    """
+
+
+def render_lead_row(lead: Lead, templates: List[Template], admin_token: str) -> str:
+    template_name = recommended_confirmation_template_name(lead)
+    template = next((item for item in templates if item.template_name == template_name), None)
+    if template:
+      anchor = scheduled_from_timestamp(lead, template)
+      due_at = anchor + timedelta(days=template.delay_days, minutes=template.delay_minutes)
+      due_text = due_at.isoformat().replace("+00:00", "Z")
+      due_now = is_due_to_send(lead, template)
+      delay_copy = f"{template.delay_days}d {template.delay_minutes}m"
+    else:
+      due_text = "n/a"
+      due_now = False
+      delay_copy = "n/a"
+
+    hidden = render_hidden_token(admin_token)
+    return f"""
+    <form class="lead-row" method="post" action="/admin/send-confirmation">
+      {hidden}
+      <input type="hidden" name="lead_id" value="{escape(lead.lead_id)}" />
+      <div class="lead-top">
+        <div>
+          <div class="lead-name">{escape((lead.first_name + ' ' + lead.last_name).strip() or lead.email)}</div>
+          <div class="lead-email">{escape(lead.email)}</div>
+        </div>
+        <div class="badge">{escape(lead.lead_type or 'lead')}</div>
+      </div>
+      <div class="facts">
+        <span><strong>Status:</strong> {escape(lead.status or 'new')}</span>
+        <span><strong>Source:</strong> {escape(lead.source or 'unknown')}</span>
+        <span><strong>Campaign:</strong> {escape(lead.ad_campaign_name or lead.utm_campaign or 'n/a')}</span>
+        <span><strong>Template:</strong> {escape(template_name or 'none')}</span>
+      </div>
+      <div class="actions">
+        <div class="hint">
+          Delay window: {escape(delay_copy)}. Due from: {escape(due_text)}. Currently {'eligible to send' if due_now else 'waiting for delay window'}.
+        </div>
+        <div style="display:grid;gap:10px;">
+          <input type="hidden" name="template_name" value="{escape(template_name or '')}" />
+          <button type="submit">Force Send Confirmation</button>
+        </div>
+      </div>
+    </form>
+    """
+
+
+def render_hidden_token(admin_token: str) -> str:
+    if not admin_token:
+        return ""
+    return f'<input type="hidden" name="admin_token" value="{escape(admin_token)}" />'

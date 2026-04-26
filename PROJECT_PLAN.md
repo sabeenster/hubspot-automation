@@ -40,6 +40,10 @@ Completed:
 - lead-type-specific confirmation timing established:
   - email/newsletter/contact leads: 10 minutes
   - demo bookings: 30 minutes
+- lightweight operator UI added at `/admin`:
+  - force-send confirmation email for a lead
+  - edit per-template delay settings without code changes
+  - optional `ADMIN_TOKEN` gate for Railway-hosted access
 
 In progress:
 
@@ -117,7 +121,7 @@ Use this same pattern next time we build a new internal agent unless there is a 
 For this family of agents, default to:
 
 - Web service:
-  receives webhooks, health checks, tracking hits
+  receives webhooks, health checks, tracking hits, lightweight admin UI
 - Scheduled job:
   runs a single orchestration command such as `sync-all`
 - Local DB or hosted DB:
@@ -132,3 +136,4 @@ Every future agent repo should include:
 - `.env.example`
 - deployment config for Railway
 - one-command scheduled sync entrypoint where practical
+- a minimal operator UI when human override/config is part of the workflow

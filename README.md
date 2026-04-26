@@ -141,6 +141,7 @@ This repo is set up to deploy to Railway as a web service:
 - Railway should expose the service on `PORT`
 - `GET /healthz` returns a simple health response
 - `POST /webhooks/hubspot` is the HubSpot webhook target
+- `GET /admin` provides an operator UI for manual confirmation sends and delay configuration
 
 Recommended Railway shape:
 
@@ -165,6 +166,7 @@ Recommended Railway environment variables:
 - `RESEND_API_KEY`
 - `RESEND_FROM_EMAIL`
 - `RESEND_REPLY_TO_EMAIL`
+- `ADMIN_TOKEN`
 - `GOOGLE_SHEET_ID`
 - `GOOGLE_SERVICE_ACCOUNT_JSON`
 - `GRANOLA_API_KEY`
@@ -180,6 +182,20 @@ Recommended Railway setup steps:
 6. Confirm `GET /healthz` works
 7. Point HubSpot webhooks to `https://your-domain/webhooks/hubspot`
 8. Add a Railway scheduled job for `python3 -m src.agentway_leads.cli sync-all`
+
+## Operator UI
+
+The app also exposes a lightweight admin console:
+
+- `/admin` shows recent leads and template delays
+- you can force-send a confirmation email for a lead
+- you can update per-template delays such as 10 minutes or 30 minutes
+
+If `ADMIN_TOKEN` is set, open:
+
+- `/admin?admin_token=YOUR_TOKEN`
+
+That keeps the UI usable on a public Railway service without leaving it completely open.
 
 ## Attribution data
 
