@@ -1,15 +1,16 @@
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents || "{}");
+    const sheetId = payload.sheet_id;
     const tabName = payload.tab_name;
     const headers = Array.isArray(payload.headers) ? payload.headers : [];
     const rows = Array.isArray(payload.rows) ? payload.rows : [];
 
-    if (!tabName || headers.length === 0) {
-      return jsonResponse({ ok: false, error: "Missing tab_name or headers" }, 400);
+    if (!sheetId || !tabName || headers.length === 0) {
+      return jsonResponse({ ok: false, error: "Missing sheet_id, tab_name, or headers" }, 400);
     }
 
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    const spreadsheet = SpreadsheetApp.openById(sheetId);
     const sheet = spreadsheet.getSheetByName(tabName) || spreadsheet.insertSheet(tabName);
     const values = [headers].concat(rows);
 
