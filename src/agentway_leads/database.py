@@ -330,3 +330,21 @@ class Database:
                 "UPDATE templates SET delay_days = ?, delay_minutes = ? WHERE template_name = ?",
                 (delay_days, delay_minutes, template_name),
             )
+
+    def update_template_content(
+        self,
+        template_name: str,
+        subject: str,
+        body: str,
+        delay_days: int,
+        delay_minutes: int,
+    ) -> None:
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE templates
+                SET subject = ?, body = ?, delay_days = ?, delay_minutes = ?
+                WHERE template_name = ?
+                """,
+                (subject, body, delay_days, delay_minutes, template_name),
+            )

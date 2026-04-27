@@ -21,7 +21,7 @@ def determine_automations(leads: List[Lead]) -> List[AutomationDecision]:
             decisions.append(
                 AutomationDecision(
                     lead_id=lead.lead_id,
-                    template_name="newsletter_confirmation",
+                    template_name="email_signup_confirmation",
                     reason="new lead confirmation after delay",
                     context={"first_name": lead.first_name or "there"},
                 )
@@ -54,9 +54,12 @@ def execute_automations(
     db: Database,
     email_client: ResendEmailClient,
     decisions: List[AutomationDecision],
+    automatic_email_enabled: bool = True,
     dry_run: bool = False,
 ) -> List[EmailEvent]:
     sent: List[EmailEvent] = []
+    if not automatic_email_enabled and not dry_run:
+        return sent
     for decision in decisions:
         lead = db.get_lead_by_id(decision.lead_id)
         template = db.get_template(decision.template_name)
@@ -80,18 +83,22 @@ def send_confirmation_for_lead(
     db: Database,
     email_client: ResendEmailClient,
     lead_id: str,
+    template_name: str = "",
     dry_run: bool = False,
 ) -> EmailEvent:
     lead = db.get_lead_by_id(lead_id)
     if not lead:
         raise ValueError("Lead not found")
-    template_name = recommended_confirmation_template_name(lead)
+    template_name = template_name or recommended_confirmation_template_name(lead)
     if not template_name:
         raise ValueError("No confirmation template for this lead")
     template = db.get_template(template_name)
     if not template:
         raise ValueError("Template not found")
-    context = {"first_name": lead.first_name or "there"}
+    context = {
+        "first_name": lead.first_name or "there",
+        "workflow_area": lead.workflow_area or "your current workflow",
+    }
     return send_template_to_lead(db, email_client, lead, template, context, dry_run=dry_run)
 
 
@@ -145,14 +152,14 @@ def scheduled_from_timestamp(lead: Lead, template: Template):
 
 def recommended_confirmation_template_name(lead: Lead) -> str:
     if lead.lead_type in {"newsletter_signup", "contact_form"}:
-        return "newsletter_confirmation"
+        return "email_signup_confirmation"
     if lead.lead_type == "demo_request":
         return "demo_booking_confirmation"
     return ""
 
 
 def update_lead_after_send(db: Database, lead: Lead, template_name: str) -> None:
-    if template_name == "newsletter_confirmation":
+    if template_name == "email_signup_confirmation":
         db.update_lead_fields(
             lead.lead_id,
             status="confirmed",

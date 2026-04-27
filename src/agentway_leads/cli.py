@@ -92,7 +92,13 @@ def main() -> None:
             reply_to_email=settings.resend_reply_to_email,
         )
         decisions = determine_automations(db.get_leads())
-        sent = execute_automations(db, email_client, decisions, dry_run=args.dry_run)
+        sent = execute_automations(
+            db,
+            email_client,
+            decisions,
+            automatic_email_enabled=settings.automatic_email_enabled,
+            dry_run=args.dry_run,
+        )
         print(f"Evaluated {len(decisions)} automations and sent {len(sent)} emails")
         return
 
@@ -129,12 +135,19 @@ def main() -> None:
             reply_to_email=settings.resend_reply_to_email,
         )
         decisions = determine_automations(db.get_leads())
-        sent = execute_automations(db, email_client, decisions, dry_run=args.dry_run)
+        sent = execute_automations(
+            db,
+            email_client,
+            decisions,
+            automatic_email_enabled=settings.automatic_email_enabled,
+            dry_run=args.dry_run,
+        )
 
         if not args.skip_sheets:
             sync = GoogleSheetsSync(
                 sheet_id=settings.google_sheet_id,
                 service_account_json=settings.google_service_account_json,
+                apps_script_webhook_url=settings.sheets_apps_script_url,
             )
             sync.push_leads(db.get_leads())
             sync.push_email_events(db.get_email_events())
@@ -167,6 +180,7 @@ def main() -> None:
             settings.hubspot_webhook_secret,
             email_client,
             settings.admin_token,
+            settings.automatic_email_enabled,
             host=args.host or settings.host,
             port=args.port or settings.port,
         )
@@ -177,6 +191,7 @@ def main() -> None:
         sync = GoogleSheetsSync(
             sheet_id=settings.google_sheet_id,
             service_account_json=settings.google_service_account_json,
+            apps_script_webhook_url=settings.sheets_apps_script_url,
         )
         sync.push_leads(db.get_leads())
         sync.push_email_events(db.get_email_events())

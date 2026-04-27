@@ -2,6 +2,13 @@ from dataclasses import dataclass
 import os
 
 
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass
 class Settings:
     app_env: str = os.getenv("APP_ENV", "development")
@@ -17,9 +24,11 @@ class Settings:
     resend_from_email: str = os.getenv("RESEND_FROM_EMAIL", "")
     resend_reply_to_email: str = os.getenv("RESEND_REPLY_TO_EMAIL", "")
     admin_token: str = os.getenv("ADMIN_TOKEN", "")
+    automatic_email_enabled: bool = env_flag("AUTOMATIC_EMAIL_ENABLED", False)
     hubspot_access_token: str = os.getenv("HUBSPOT_ACCESS_TOKEN", "")
     hubspot_portal_id: str = os.getenv("HUBSPOT_PORTAL_ID", "")
     google_sheet_id: str = os.getenv("GOOGLE_SHEET_ID", "")
+    sheets_apps_script_url: str = os.getenv("SHEETS_APPS_SCRIPT_URL", "")
     google_service_account_json: str = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON", "")
     granola_api_key: str = os.getenv("GRANOLA_API_KEY", "")
     granola_api_base: str = os.getenv("GRANOLA_API_BASE", "https://api.granola.ai")

@@ -1,4 +1,5 @@
 import json
+import urllib.request
 from typing import Iterable, List
 
 from .models import EmailEvent, Lead, MeetingNote
@@ -84,9 +85,15 @@ MEETING_NOTES_HEADERS = [
 
 
 class GoogleSheetsSync:
-    def __init__(self, sheet_id: str, service_account_json: str):
+    def __init__(
+        self,
+        sheet_id: str,
+        service_account_json: str,
+        apps_script_webhook_url: str = "",
+    ):
         self.sheet_id = sheet_id
         self.service_account_json = service_account_json
+        self.apps_script_webhook_url = apps_script_webhook_url
 
     def push_leads(self, leads: Iterable[Lead]) -> None:
         rows = [
@@ -110,6 +117,9 @@ class GoogleSheetsSync:
         self._write_tab("Meeting Notes", MEETING_NOTES_HEADERS, rows)
 
     def _write_tab(self, tab_name: str, headers: List[str], rows: List[List[object]]) -> None:
+        if self.apps_script_webhook_url:
+            self._write_via_apps_script(tab_name, headers, rows)
+            return
         service = self._build_service()
         payload = {
             "valueInputOption": "RAW",
@@ -125,9 +135,34 @@ class GoogleSheetsSync:
             body=payload,
         ).execute()
 
+    def _write_via_apps_script(
+        self,
+        tab_name: str,
+        headers: List[str],
+        rows: List[List[object]],
+    ) -> None:
+        payload = {
+            "sheet_id": self.sheet_id,
+            "tab_name": tab_name,
+            "headers": headers,
+            "rows": rows,
+        }
+        request = urllib.request.Request(
+            self.apps_script_webhook_url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=20) as response:
+            response.read()
+
     def _build_service(self):
         if not self.sheet_id or not self.service_account_json:
-            raise RuntimeError("Google Sheets credentials are not configured")
+            raise RuntimeError(
+                "Google Sheets credentials are not configured. "
+                "Set SHEETS_APPS_SCRIPT_URL for the simpler attached-sheet flow, "
+                "or provide GOOGLE_SERVICE_ACCOUNT_JSON for the direct Sheets API flow."
+            )
         if service_account is None or build is None:
             raise RuntimeError(
                 "Google Sheets dependencies are not installed. Install requirements.txt first."

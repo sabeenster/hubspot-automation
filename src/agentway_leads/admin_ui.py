@@ -11,12 +11,15 @@ def render_admin_page(
     templates: List[Template],
     flash_message: str = "",
     admin_token: str = "",
+    automatic_email_enabled: bool = False,
 ) -> str:
     template_rows = "\n".join(render_template_row(template, admin_token) for template in templates)
     lead_rows = "\n".join(render_lead_row(lead, templates, admin_token) for lead in leads[:50])
     flash_html = (
         f'<div class="flash">{escape(flash_message)}</div>' if flash_message else ""
     )
+    auto_state = "Automatic sending is ON." if automatic_email_enabled else "Automatic sending is OFF. Manual force-send still works."
+    auto_class = "auto-on" if automatic_email_enabled else "auto-off"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -82,6 +85,23 @@ def render_admin_page(
       color: var(--accent);
       border-radius: 16px;
       font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    .auto-state {{
+      padding: 14px 16px;
+      border-radius: 16px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+      border: 1px solid var(--line);
+    }}
+    .auto-off {{
+      background: rgba(159,18,57,0.08);
+      color: var(--danger);
+      border-color: rgba(159,18,57,0.2);
+    }}
+    .auto-on {{
+      background: rgba(15,118,110,0.08);
+      color: var(--accent);
+      border-color: rgba(15,118,110,0.2);
     }}
     .grid {{
       display: grid;
@@ -157,6 +177,18 @@ def render_admin_page(
       padding: 11px 12px;
       background: white;
       font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    input[type="text"], textarea {{
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 11px 12px;
+      background: white;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }}
+    textarea {{
+      min-height: 156px;
+      resize: vertical;
     }}
     button {{
       border: 0;
@@ -254,6 +286,7 @@ def render_admin_page(
       <div class="eyebrow">Agentway Ops Console</div>
       <h1>Confirm leads on your terms.</h1>
       <p class="subtitle">Force-send a confirmation to any lead, and adjust the timing windows that govern automated follow-up as this flow gets more sophisticated.</p>
+      <div class="auto-state {auto_class}">{escape(auto_state)}</div>
       {flash_html}
     </section>
     <section class="grid">
@@ -296,6 +329,12 @@ def render_template_row(template: Template, admin_token: str) -> str:
         </label>
         <button type="submit">Save Delay</button>
       </div>
+      <label>Subject
+        <input type="text" name="subject" value="{escape(template.subject)}" />
+      </label>
+      <label>Body
+        <textarea name="body">{escape(template.body)}</textarea>
+      </label>
     </form>
     """
 
@@ -315,6 +354,15 @@ def render_lead_row(lead: Lead, templates: List[Template], admin_token: str) -> 
       delay_copy = "n/a"
 
     hidden = render_hidden_token(admin_token)
+    options = "".join(
+        render_template_option(template, template_name)
+        for template in templates
+        if template.template_name in {
+            "email_signup_confirmation",
+            "demo_booking_confirmation",
+            "post_demo_followup",
+        }
+    )
     return f"""
     <form class="lead-row" method="post" action="/admin/send-confirmation">
       {hidden}
@@ -337,7 +385,9 @@ def render_lead_row(lead: Lead, templates: List[Template], admin_token: str) -> 
           Delay window: {escape(delay_copy)}. Due from: {escape(due_text)}. Currently {'eligible to send' if due_now else 'waiting for delay window'}.
         </div>
         <div style="display:grid;gap:10px;">
-          <input type="hidden" name="template_name" value="{escape(template_name or '')}" />
+          <label>Template
+            <select name="template_name">{options}</select>
+          </label>
           <button type="submit">Force Send Confirmation</button>
         </div>
       </div>
@@ -349,3 +399,8 @@ def render_hidden_token(admin_token: str) -> str:
     if not admin_token:
         return ""
     return f'<input type="hidden" name="admin_token" value="{escape(admin_token)}" />'
+
+
+def render_template_option(template: Template, selected_template_name: str) -> str:
+    selected = " selected" if template.template_name == selected_template_name else ""
+    return f'<option value="{escape(template.template_name)}"{selected}>{escape(template.template_name)}</option>'

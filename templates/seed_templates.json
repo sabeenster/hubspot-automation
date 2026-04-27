@@ -1,6 +1,6 @@
 [
   {
-    "template_name": "newsletter_confirmation",
+    "template_name": "email_signup_confirmation",
     "lead_type": "newsletter_signup",
     "subject": "Thanks for reaching out",
     "body": "Hi {{first_name}},\n\nThanks for reaching out and for your interest in Agentway.\n\nWe help consumer brands automate the manual back-office work that usually lives across spreadsheets, inboxes, ERPs, order systems, CX tools, and finance workflows.\n\nI’ll send occasional notes on what we’re seeing across ecommerce ops, AI automation, and the workflows brands are still doing manually.\n\nBest,\nSabeen",

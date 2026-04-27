@@ -24,6 +24,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
     hubspot_webhook_secret: str = ""
     email_client: ResendEmailClient = None  # type: ignore[assignment]
     admin_token: str = ""
+    automatic_email_enabled: bool = False
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -49,6 +50,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
                 self.db.get_templates(),
                 flash_message=flash_message,
                 admin_token=self.current_admin_token(query),
+                automatic_email_enabled=self.automatic_email_enabled,
             )
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -105,8 +107,16 @@ class TrackingHandler(BaseHTTPRequestHandler):
             template_name = form.get("template_name", [""])[0]
             delay_days = int(form.get("delay_days", ["0"])[0] or "0")
             delay_minutes = int(form.get("delay_minutes", ["0"])[0] or "0")
-            self.db.update_template_delay(template_name, delay_days, delay_minutes)
-            self.redirect_admin("Delay updated", form)
+            subject = form.get("subject", [""])[0]
+            body_text = form.get("body", [""])[0]
+            self.db.update_template_content(
+                template_name,
+                subject,
+                body_text,
+                delay_days,
+                delay_minutes,
+            )
+            self.redirect_admin("Template updated", form)
             return
 
         if parsed.path == "/admin/send-confirmation":
@@ -115,8 +125,14 @@ class TrackingHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
             lead_id = form.get("lead_id", [""])[0]
+            template_name = form.get("template_name", [""])[0]
             try:
-                event = send_confirmation_for_lead(self.db, self.email_client, lead_id)
+                event = send_confirmation_for_lead(
+                    self.db,
+                    self.email_client,
+                    lead_id,
+                    template_name=template_name,
+                )
                 self.redirect_admin(f"Confirmation sent: {event.template_name}", form)
             except ValueError as exc:
                 self.redirect_admin(str(exc), form)
@@ -149,6 +165,7 @@ def serve_tracking(
     hubspot_webhook_secret: str,
     email_client: ResendEmailClient,
     admin_token: str = "",
+    automatic_email_enabled: bool = False,
     host: str = "0.0.0.0",
     port: int = 8080,
 ) -> None:
@@ -161,6 +178,7 @@ def serve_tracking(
             "hubspot_webhook_secret": hubspot_webhook_secret,
             "email_client": email_client,
             "admin_token": admin_token,
+            "automatic_email_enabled": automatic_email_enabled,
         },
     )
     server = HTTPServer((host, port), handler)

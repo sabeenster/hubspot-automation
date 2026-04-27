@@ -8,7 +8,7 @@ It keeps HubSpot as the CRM of record while running automation logic outside Hub
 - HubSpot attribution is preserved deeply enough to support future ad-aware personalization.
 - Local rule evaluation decides which email should be sent next.
 - Resend is the delivery channel.
-- Google Sheets is the visibility layer for operators.
+- Google Sheets is the visibility layer for operators, using an Apps Script attached to the existing sheet by default.
 - Granola meeting notes can be linked back to leads after customer calls.
 - Tracking endpoints record opens and clicks.
 - SQLite provides a small local audit trail during development.
@@ -18,7 +18,7 @@ It keeps HubSpot as the CRM of record while running automation logic outside Hub
 - A Python CLI for syncing contacts, evaluating rules, and generating reports.
 - Lead records keep both normalized attribution fields and a raw HubSpot attribution snapshot.
 - Rule-based automations for:
-  - new lead confirmation
+  - email signup confirmation
   - demo booking confirmation
   - post-demo follow-up
   - manual status-driven next actions
@@ -56,6 +56,8 @@ src/agentway_leads/
   templates.py
   tracking_server.py
   webhooks.py
+apps_script/
+  lead_sheet_sync.gs
 templates/
   seed_templates.json
 .env.example
@@ -121,7 +123,7 @@ This repo is set up so we can connect real services incrementally:
 
 - `hubspot.py`: fetch contacts or form submissions from HubSpot, including ad and source attribution fields.
 - `email_sender.py`: send transactional or newsletter emails via Resend using Railway-friendly env vars.
-- `sheets.py`: mirror state into a Google Sheet for operator visibility.
+- `sheets.py`: mirror state into a Google Sheet for operator visibility, preferably through an Apps Script webhook attached to the target sheet.
 - `tracking_server.py`: record opens and clicks for outbound emails and accept HubSpot webhooks.
 - `granola.py`: poll Granola notes and link them to leads by attendee email.
 
@@ -167,7 +169,9 @@ Recommended Railway environment variables:
 - `RESEND_FROM_EMAIL`
 - `RESEND_REPLY_TO_EMAIL`
 - `ADMIN_TOKEN`
+- `AUTOMATIC_EMAIL_ENABLED=false` during testing
 - `GOOGLE_SHEET_ID`
+- `SHEETS_APPS_SCRIPT_URL`
 - `GOOGLE_SERVICE_ACCOUNT_JSON`
 - `GRANOLA_API_KEY`
 - `GRANOLA_API_BASE`
@@ -183,19 +187,56 @@ Recommended Railway setup steps:
 7. Point HubSpot webhooks to `https://your-domain/webhooks/hubspot`
 8. Add a Railway scheduled job for `python3 -m src.agentway_leads.cli sync-all`
 
+## Simpler Google Sheet setup
+
+If you already have the sheet you want to use, the simplest setup is:
+
+1. Use this Google Drive folder as the canonical home for the lead-ops assets:
+   - [Agentway lead ops folder](https://drive.google.com/drive/folders/1OZexKXpIAr4dtT1cX1axHqr7Fa5D6Drc)
+2. Open the existing spreadsheet:
+   - [Agentway lead sheet](https://docs.google.com/spreadsheets/d/1491aWSiFvUIKD43kob7whVljOEDksyOkVXXiBME-g8M/edit?usp=sharing)
+3. Open `Extensions -> Apps Script`
+4. Paste in [apps_script/lead_sheet_sync.gs](/Users/sabeen/Documents/Codex/2026-04-26/yes-i-think-you-can-and/apps_script/lead_sheet_sync.gs)
+5. Deploy it as a web app:
+   - execute as: `Me`
+   - who has access: `Anyone with the link`
+6. Copy the deployed web app URL into:
+   - `SHEETS_APPS_SCRIPT_URL`
+7. Set:
+   - `GOOGLE_SHEET_ID=1491aWSiFvUIKD43kob7whVljOEDksyOkVXXiBME-g8M`
+
+That attached-sheet Apps Script path is now the preferred setup for this project.
+
+The older `GOOGLE_SERVICE_ACCOUNT_JSON` route still works as a fallback, but it is no longer the recommended first step.
+
 ## Operator UI
 
 The app also exposes a lightweight admin console:
 
 - `/admin` shows recent leads and template delays
-- you can force-send a confirmation email for a lead
+- you can force-send a chosen template for a lead
 - you can update per-template delays such as 10 minutes or 30 minutes
+- you can edit template subject/body content directly in the UI
+- it shows whether automatic sending is currently enabled
 
 If `ADMIN_TOKEN` is set, open:
 
 - `/admin?admin_token=YOUR_TOKEN`
 
 That keeps the UI usable on a public Railway service without leaving it completely open.
+
+## Testing mode
+
+To keep the app from automatically sending while you test:
+
+- set `AUTOMATIC_EMAIL_ENABLED=false`
+
+In that mode:
+
+- leads still sync in from HubSpot
+- the admin UI still works
+- manual force-send from `/admin` still works
+- scheduled and automatic sends do not go out
 
 ## Attribution data
 
