@@ -49,6 +49,8 @@ Completed:
   - manual force-send remains available
 - template subject/body editing added to the admin UI
 - Apps Script-based Google Sheet sync path added so the existing sheet can be updated without requiring a new Google Cloud service-account setup
+- Google Sheet tab order standardized to `Leads`, `Email Events`, then `Meeting Notes`
+- lead attribution expanded with ad-level fields including `ad_activity` and `facebook_click_id`
 
 In progress:
 

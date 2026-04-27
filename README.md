@@ -244,12 +244,13 @@ The lead model now keeps:
 
 - normalized source fields such as `source`, `source_drilldown_1`, `source_drilldown_2`
 - UTM fields such as `utm_campaign`, `utm_ad`, and `utm_content`
-- ad-aware fields such as `ad_campaign_name`, `ad_campaign_id`, `ad_id`, and `ad_network`
+- ad-aware fields such as `ad_activity`, `ad_campaign_name`, `ad_campaign_id`, `ad_id`, `facebook_click_id`, and `ad_network`
 - a raw `attribution_snapshot_json` copy of key HubSpot attribution properties
 
 That gives us enough structure to segment later on things like:
 
 - Meta leads vs direct demo traffic
 - campaign-specific follow-up
+- ad-activity-specific follow-up using the best ad-level string HubSpot exposes on the contact
 - creative-aware personalization
 - “people who came from ops pain point ads” vs “people who came from founder story ads”

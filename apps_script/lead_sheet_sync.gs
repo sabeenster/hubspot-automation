@@ -15,6 +15,7 @@ function doPost(e) {
 
     sheet.clearContents();
     sheet.getRange(1, 1, values.length, headers.length).setValues(values);
+    moveSheetToPreferredPosition(spreadsheet, sheet, tabName);
 
     return jsonResponse({
       ok: true,
@@ -25,6 +26,22 @@ function doPost(e) {
   } catch (error) {
     return jsonResponse({ ok: false, error: String(error) }, 500);
   }
+}
+
+function moveSheetToPreferredPosition(spreadsheet, sheet, tabName) {
+  const order = {
+    "Leads": 1,
+    "Email Events": 2,
+    "Meeting Notes": 3,
+  };
+
+  const targetIndex = order[tabName];
+  if (!targetIndex) {
+    return;
+  }
+
+  spreadsheet.setActiveSheet(sheet);
+  spreadsheet.moveActiveSheet(targetIndex);
 }
 
 function jsonResponse(payload) {

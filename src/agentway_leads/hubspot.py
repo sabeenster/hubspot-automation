@@ -52,11 +52,13 @@ def contact_to_lead(contact: dict) -> Lead:
         utm_campaign=attribution["utm_campaign"],
         utm_ad=attribution["utm_ad"],
         utm_content=attribution["utm_content"],
+        ad_activity=attribution["ad_activity"],
         ad_campaign_name=attribution["ad_campaign_name"],
         ad_campaign_id=attribution["ad_campaign_id"],
         ad_group_id=attribution["ad_group_id"],
         ad_id=attribution["ad_id"],
         ad_network=attribution["ad_network"],
+        facebook_click_id=attribution["facebook_click_id"],
         attribution_snapshot_json=attribution["attribution_snapshot_json"],
         hubspot_contact_id=contact.get("id", ""),
         lead_type=lead_type,
@@ -101,6 +103,7 @@ HUBSPOT_CONTACT_PROPERTIES = [
     "hs_latest_source_data_1",
     "hs_latest_source_data_2",
     "hs_object_source",
+    "hs_facebook_click_id",
 ]
 
 
@@ -123,6 +126,10 @@ def extract_attribution(properties: Dict[str, str]) -> Dict[str, str]:
         properties.get("utm_campaign"),
         source_drilldown_1,
     )
+    ad_activity = first_non_empty(
+        properties.get("utm_content"),
+        source_drilldown_2,
+    )
     ad_campaign_id = read_hubspot_id(source_drilldown_1)
     ad_id = read_hubspot_id(source_drilldown_2)
     snapshot = {
@@ -137,6 +144,7 @@ def extract_attribution(properties: Dict[str, str]) -> Dict[str, str]:
         "hs_latest_source_data_1": properties.get("hs_latest_source_data_1", ""),
         "hs_latest_source_data_2": properties.get("hs_latest_source_data_2", ""),
         "hs_object_source": properties.get("hs_object_source", ""),
+        "hs_facebook_click_id": properties.get("hs_facebook_click_id", ""),
     }
     return {
         "source": source,
@@ -145,11 +153,13 @@ def extract_attribution(properties: Dict[str, str]) -> Dict[str, str]:
         "utm_campaign": properties.get("utm_campaign", ""),
         "utm_ad": properties.get("utm_medium", ""),
         "utm_content": properties.get("utm_content", ""),
+        "ad_activity": ad_activity,
         "ad_campaign_name": ad_campaign_name,
         "ad_campaign_id": ad_campaign_id,
         "ad_group_id": "",
         "ad_id": ad_id,
         "ad_network": normalize_ad_network(source),
+        "facebook_click_id": properties.get("hs_facebook_click_id", ""),
         "attribution_snapshot_json": json.dumps(snapshot, sort_keys=True),
     }
 
