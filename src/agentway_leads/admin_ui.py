@@ -340,6 +340,9 @@ def render_template_row(template: Template, admin_token: str) -> str:
 
 
 def render_lead_row(lead: Lead, templates: List[Template], admin_token: str) -> str:
+    first_name = lead.first_name or ""
+    last_name = lead.last_name or ""
+    display_name = f"{first_name} {last_name}".strip() or (lead.email or "Unknown lead")
     template_name = recommended_confirmation_template_name(lead)
     template = next((item for item in templates if item.template_name == template_name), None)
     if template:
@@ -367,10 +370,10 @@ def render_lead_row(lead: Lead, templates: List[Template], admin_token: str) -> 
     <form class="lead-row" method="post" action="/admin/send-confirmation">
       {hidden}
       <input type="hidden" name="lead_id" value="{escape(lead.lead_id)}" />
-      <div class="lead-top">
+        <div class="lead-top">
         <div>
-          <div class="lead-name">{escape((lead.first_name + ' ' + lead.last_name).strip() or lead.email)}</div>
-          <div class="lead-email">{escape(lead.email)}</div>
+          <div class="lead-name">{escape(display_name)}</div>
+          <div class="lead-email">{escape(lead.email or "")}</div>
         </div>
         <div class="badge">{escape(lead.lead_type or 'lead')}</div>
       </div>
