@@ -2,14 +2,15 @@ import argparse
 import json
 from pathlib import Path
 
-from .automation import determine_automations, execute_automations
+from .automation import determine_automations, queue_approval_requests
 from .config import get_settings
 from .database import Database
-from .email_sender import ResendEmailClient
+from .email_sender import build_email_client
 from .granola import GranolaClient, sync_granola_notes
 from .hubspot import HubSpotClient, contact_to_lead
 from .reporting import generate_weekly_report
 from .sheets import GoogleSheetsSync
+from .slack import SlackNotifier
 from .tracking_server import serve_tracking
 
 
@@ -79,27 +80,24 @@ def main() -> None:
         leads = [contact_to_lead(contact) for contact in contacts if contact.get("properties", {}).get("email")]
         for lead in leads:
             db.upsert_lead(lead)
-        print(f"Synced {len(leads)} leads")
+        decisions = determine_automations(db.get_leads())
+        queued = queue_approval_requests(
+            db,
+            decisions,
+            SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
+        )
+        print(f"Synced {len(leads)} leads and queued {len(queued)} approval requests")
         return
 
     if args.command == "run-automations":
         db.init_db()
-        email_client = ResendEmailClient(
-            api_key=settings.resend_api_key,
-            from_name=settings.email_from_name,
-            from_email=settings.resend_from_email or settings.email_from_email,
-            tracking_base_url=settings.tracking_base_url,
-            reply_to_email=settings.resend_reply_to_email,
-        )
         decisions = determine_automations(db.get_leads())
-        sent = execute_automations(
+        queued = queue_approval_requests(
             db,
-            email_client,
             decisions,
-            automatic_email_enabled=settings.automatic_email_enabled,
-            dry_run=args.dry_run,
+            SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
         )
-        print(f"Evaluated {len(decisions)} automations and sent {len(sent)} emails")
+        print(f"Evaluated {len(decisions)} automations and queued {len(queued)} approval requests")
         return
 
     if args.command == "sync-all":
@@ -127,20 +125,11 @@ def main() -> None:
         )
         linked = sync_granola_notes(db, notes)
 
-        email_client = ResendEmailClient(
-            api_key=settings.resend_api_key,
-            from_name=settings.email_from_name,
-            from_email=settings.resend_from_email or settings.email_from_email,
-            tracking_base_url=settings.tracking_base_url,
-            reply_to_email=settings.resend_reply_to_email,
-        )
         decisions = determine_automations(db.get_leads())
-        sent = execute_automations(
+        queued = queue_approval_requests(
             db,
-            email_client,
             decisions,
-            automatic_email_enabled=settings.automatic_email_enabled,
-            dry_run=args.dry_run,
+            SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
         )
 
         if not args.skip_sheets:
@@ -155,7 +144,7 @@ def main() -> None:
 
         print(
             "Sync complete: "
-            f"{len(leads)} leads, {linked} meeting notes, {len(decisions)} automations, {len(sent)} emails"
+            f"{len(leads)} leads, {linked} meeting notes, {len(decisions)} automations, {len(queued)} approvals queued"
         )
         return
 
@@ -167,18 +156,14 @@ def main() -> None:
 
     if args.command == "serve-tracking":
         db.init_db()
-        email_client = ResendEmailClient(
-            api_key=settings.resend_api_key,
-            from_name=settings.email_from_name,
-            from_email=settings.resend_from_email or settings.email_from_email,
-            tracking_base_url=settings.tracking_base_url,
-            reply_to_email=settings.resend_reply_to_email,
-        )
+        email_client = build_email_client(settings)
         serve_tracking(
             db,
             settings.base_url,
             settings.hubspot_webhook_secret,
             email_client,
+            HubSpotClient(settings.hubspot_access_token),
+            SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
             settings.admin_token,
             settings.automatic_email_enabled,
             host=args.host or settings.host,

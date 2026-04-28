@@ -6,8 +6,9 @@ It keeps HubSpot as the CRM of record while running automation logic outside Hub
 
 - HubSpot provides contacts, demo submissions, and attribution data.
 - HubSpot attribution is preserved deeply enough to support future ad-aware personalization.
-- Local rule evaluation decides which email should be sent next.
-- Resend is the delivery channel.
+- Local rule evaluation decides which template should be proposed next.
+- Slack is the approval channel for new lead/demo notifications.
+- Gmail is the primary delivery channel for approved sends.
 - Google Sheets is the visibility layer for operators, using an Apps Script attached to the existing sheet by default.
 - Granola meeting notes can be linked back to leads after customer calls.
 - Tracking endpoints record opens and clicks.
@@ -17,7 +18,7 @@ It keeps HubSpot as the CRM of record while running automation logic outside Hub
 
 - A Python CLI for syncing contacts, evaluating rules, and generating reports.
 - Lead records keep both normalized attribution fields and a raw HubSpot attribution snapshot.
-- Rule-based automations for:
+- Rule-based approval generation for:
   - email signup confirmation
   - demo booking confirmation
   - post-demo follow-up
@@ -79,10 +80,10 @@ python3 -m src.agentway_leads.cli seed-templates
 python3 -m src.agentway_leads.cli sync-hubspot --sample-data sample_contacts.json
 ```
 
-4. Evaluate automations:
+4. Queue approval requests:
 
 ```bash
-python3 -m src.agentway_leads.cli run-automations --dry-run
+python3 -m src.agentway_leads.cli run-automations
 ```
 
 5. Start tracking endpoints locally:
@@ -111,7 +112,7 @@ python3 -m src.agentway_leads.cli weekly-report
 python3 -m src.agentway_leads.cli sync-all --dry-run
 ```
 
-The default timing behavior is:
+The default timing behavior for approval creation is:
 
 - email/newsletter/contact leads receive confirmation after 10 minutes
 - demo bookings receive confirmation after 30 minutes
@@ -122,7 +123,8 @@ The default timing behavior is:
 This repo is set up so we can connect real services incrementally:
 
 - `hubspot.py`: fetch contacts or form submissions from HubSpot, including ad and source attribution fields.
-- `email_sender.py`: send transactional or newsletter emails via Resend using Railway-friendly env vars.
+- `email_sender.py`: send approved emails via Gmail, with Resend retained as a fallback provider.
+- `slack.py`: send approval notifications into Slack with an approval link and an admin fallback link.
 - `sheets.py`: mirror state into a Google Sheet for operator visibility, preferably through an Apps Script webhook attached to the target sheet.
 - `tracking_server.py`: record opens and clicks for outbound emails and accept HubSpot webhooks.
 - `granola.py`: poll Granola notes and link them to leads by attendee email.
@@ -131,7 +133,7 @@ The service is useful even before every integration is live because the rule eng
 
 ## Practical integration decisions
 
-- MailSuite can still be used as a useful inbox-side assist, but outbound delivery now runs through Resend so Railway-managed API credentials match the rest of your agents.
+- MailSuite can still be used as a useful inbox-side assist, but outbound delivery now runs through Gmail so the warmed-up domain and inbox reputation stay aligned with your manual outreach.
 - Granola should be synced on a schedule, not via webhook, because Granola's Personal API currently requires polling for new notes.
 - HubSpot remains the intake and attribution system, but automation decisions live here.
 
@@ -143,7 +145,8 @@ This repo is set up to deploy to Railway as a web service:
 - Railway should expose the service on `PORT`
 - `GET /healthz` returns a simple health response
 - `POST /webhooks/hubspot` is the HubSpot webhook target
-- `GET /admin` provides an operator UI for manual confirmation sends and delay configuration
+- `GET /admin` provides an operator UI for pending approvals, manual fallback sends, and delay configuration
+- `GET /approve-email` processes Slack approval links and sends the selected template through Gmail
 
 Recommended Railway shape:
 
@@ -162,12 +165,16 @@ Recommended Railway environment variables:
 - `DATABASE_PATH=/data/agentway_leads.db` if using a mounted volume
 - `HUBSPOT_ACCESS_TOKEN`
 - `HUBSPOT_WEBHOOK_SECRET`
-- `EMAIL_PROVIDER=resend`
+- `EMAIL_PROVIDER=gmail`
 - `EMAIL_FROM_NAME`
 - `EMAIL_FROM_EMAIL`
-- `RESEND_API_KEY`
-- `RESEND_FROM_EMAIL`
-- `RESEND_REPLY_TO_EMAIL`
+- `GMAIL_ACCESS_TOKEN`
+- `GMAIL_REFRESH_TOKEN`
+- `GMAIL_CLIENT_ID`
+- `GMAIL_CLIENT_SECRET`
+- `GMAIL_REPLY_TO_EMAIL`
+- `GMAIL_USER_ID`
+- `SLACK_WEBHOOK_URL`
 - `ADMIN_TOKEN`
 - `AUTOMATIC_EMAIL_ENABLED=false` during testing
 - `GOOGLE_SHEET_ID`
@@ -213,8 +220,9 @@ The older `GOOGLE_SERVICE_ACCOUNT_JSON` route still works as a fallback, but it 
 
 The app also exposes a lightweight admin console:
 
-- `/admin` shows recent leads and template delays
-- you can force-send a chosen template for a lead
+- `/admin` shows pending approval requests, recent leads, and template delays
+- you can approve and send a chosen template for a lead
+- you can still force-send a chosen template for a lead as a manual fallback
 - you can update per-template delays such as 10 minutes or 30 minutes
 - you can edit template subject/body content directly in the UI
 - it shows whether automatic sending is currently enabled
@@ -234,9 +242,10 @@ To keep the app from automatically sending while you test:
 In that mode:
 
 - leads still sync in from HubSpot
+- Slack approval requests still get created
 - the admin UI still works
-- manual force-send from `/admin` still works
-- scheduled and automatic sends do not go out
+- manual approval/force-send from `/admin` still works
+- scheduled and automatic sends do not go out without explicit approval
 
 ## Attribution data
 

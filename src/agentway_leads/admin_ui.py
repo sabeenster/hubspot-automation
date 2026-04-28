@@ -3,18 +3,22 @@ from html import escape
 from typing import List
 
 from .automation import is_due_to_send, recommended_confirmation_template_name, scheduled_from_timestamp
-from .models import Lead, Template
+from .models import ApprovalRequest, Lead, Template
 
 
 def render_admin_page(
     leads: List[Lead],
     templates: List[Template],
+    approval_requests: List[ApprovalRequest],
     flash_message: str = "",
     admin_token: str = "",
     automatic_email_enabled: bool = False,
 ) -> str:
     template_rows = "\n".join(render_template_row(template, admin_token) for template in templates)
     lead_rows = "\n".join(render_lead_row(lead, templates, admin_token) for lead in leads[:50])
+    approval_rows = "\n".join(
+        render_approval_row(request, leads, templates, admin_token) for request in approval_requests[:50]
+    )
     flash_html = (
         f'<div class="flash">{escape(flash_message)}</div>' if flash_message else ""
     )
@@ -285,7 +289,7 @@ def render_admin_page(
     <section class="hero">
       <div class="eyebrow">Agentway Ops Console</div>
       <h1>Confirm leads on your terms.</h1>
-      <p class="subtitle">Force-send a confirmation to any lead, and adjust the timing windows that govern automated follow-up as this flow gets more sophisticated.</p>
+      <p class="subtitle">Route new lead follow-up through Slack approval, keep templates editable, and only send when you explicitly green-light the message.</p>
       <div class="auto-state {auto_class}">{escape(auto_state)}</div>
       {flash_html}
     </section>
@@ -298,8 +302,15 @@ def render_admin_page(
         </div>
       </article>
       <article class="card">
+        <h2>Pending Approvals</h2>
+        <p class="card-copy">New email submissions and demo bookings land here first. Approve from Slack or use this queue as your fallback control room.</p>
+        <div class="leads">
+          {approval_rows or '<div class="empty">No approvals pending right now.</div>'}
+        </div>
+      </article>
+      <article class="card">
         <h2>Lead Confirmations</h2>
-        <p class="card-copy">Use force send for a one-off manual confirmation, even if the normal delay window has not elapsed yet.</p>
+        <p class="card-copy">Manual fallback if you want to send a template directly without the Slack approval link.</p>
         <div class="leads">
           {lead_rows or '<div class="empty">No leads found yet.</div>'}
         </div>
@@ -335,6 +346,49 @@ def render_template_row(template: Template, admin_token: str) -> str:
       <label>Body
         <textarea name="body">{escape(template.body)}</textarea>
       </label>
+    </form>
+    """
+
+
+def render_approval_row(
+    approval_request: ApprovalRequest,
+    leads: List[Lead],
+    templates: List[Template],
+    admin_token: str,
+) -> str:
+    lead = next((item for item in leads if item.lead_id == approval_request.lead_id), None)
+    template = next((item for item in templates if item.template_name == approval_request.template_name), None)
+    display_name = (
+        f"{(lead.first_name if lead else '') or ''} {(lead.last_name if lead else '') or ''}".strip()
+        or (lead.email if lead else approval_request.lead_id)
+    )
+    hidden = render_hidden_token(admin_token)
+    return f"""
+    <form class="lead-row" method="post" action="/admin/approve-request">
+      {hidden}
+      <input type="hidden" name="approval_request_id" value="{escape(approval_request.approval_request_id)}" />
+      <input type="hidden" name="approval_token" value="{escape(approval_request.approval_token)}" />
+      <div class="lead-top">
+        <div>
+          <div class="lead-name">{escape(display_name)}</div>
+          <div class="lead-email">{escape(lead.email if lead else '')}</div>
+        </div>
+        <div class="badge">{escape(approval_request.status)}</div>
+      </div>
+      <div class="facts">
+        <span><strong>Template:</strong> {escape(approval_request.template_name)}</span>
+        <span><strong>Reason:</strong> {escape(approval_request.reason)}</span>
+        <span><strong>Requested:</strong> {escape(approval_request.requested_at)}</span>
+        <span><strong>Source:</strong> {escape((lead.source if lead else '') or 'unknown')}</span>
+      </div>
+      <div class="actions">
+        <div class="hint">
+          {escape(template.subject if template else '')}
+        </div>
+        <div style="display:grid;gap:10px;">
+          <button type="submit">Approve + Send</button>
+        </div>
+      </div>
     </form>
     """
 

@@ -1,13 +1,14 @@
 # Agentway Lead Automation Plan
 
-Last updated: 2026-04-26
+Last updated: 2026-04-28
 
 ## Current objective
 
 Build a lightweight Agentway-owned automation layer that uses:
 
 - HubSpot for lead capture and attribution
-- Resend for outbound sending
+- Slack for operator approval notifications
+- Gmail for outbound sending after approval
 - Google Sheets for visibility and lightweight ops CRM
 - Granola for meeting-note linkage
 
@@ -19,24 +20,29 @@ Completed:
 - SQLite lead/email/meeting-note store created
 - HubSpot sync CLI added
 - HubSpot webhook endpoint added
-- Resend send path added
+- Gmail send path added
+- Slack approval notifier added
+- Approval-request datastore added
 - Open/click tracking endpoints added
 - Granola note sync and lead linkage added
 - HubSpot attribution fields expanded for future ad-aware personalization
 - Local git repo initialized and connected to `https://github.com/sabeenster/hubspot-automation.git`
 - Railway deployment config added for a hosted webhook/tracking service
-- Outbound email moved to a Railway-friendly Resend configuration pattern
 - GitHub branch created and pushed: `codex/agentway-lead-automation-v1`
 - Railway-ready web service shape documented:
   - web process runs the webhook/tracking server
   - scheduled job runs `sync-all`
 - Railway-friendly env naming established for outbound email:
-  - `EMAIL_PROVIDER=resend`
+  - `EMAIL_PROVIDER=gmail`
   - `EMAIL_FROM_NAME`
   - `EMAIL_FROM_EMAIL`
-  - `RESEND_API_KEY`
-  - `RESEND_FROM_EMAIL`
-  - `RESEND_REPLY_TO_EMAIL`
+  - `GMAIL_ACCESS_TOKEN`
+  - `GMAIL_REFRESH_TOKEN`
+  - `GMAIL_CLIENT_ID`
+  - `GMAIL_CLIENT_SECRET`
+  - `GMAIL_REPLY_TO_EMAIL`
+  - `GMAIL_USER_ID`
+  - `SLACK_WEBHOOK_URL`
 - lead-type-specific confirmation timing established:
   - email/newsletter/contact leads: 10 minutes
   - demo bookings: 30 minutes
@@ -47,6 +53,10 @@ Completed:
 - testing-safe automatic send gate added:
   - `AUTOMATIC_EMAIL_ENABLED=false` disables automatic sending
   - manual force-send remains available
+- Slack approval flow under active implementation:
+  - new email submissions and demo bookings should queue an approval request
+  - Slack notification should include an approval button
+  - approval click should send the chosen template through Gmail
 - template subject/body editing added to the admin UI
 - Apps Script-based Google Sheet sync path added so the existing sheet can be updated without requiring a new Google Cloud service-account setup
 - Google Sheet tab order standardized to `Leads`, `Email Events`, then `Meeting Notes`
@@ -57,21 +67,23 @@ In progress:
 - Tighten live integration behavior and setup docs
 - Deploy to Railway and document service/cron setup
 - Finish the simpler attached-sheet Apps Script rollout docs and verification
+- Finish Slack approval wiring and Gmail credential rollout
 
 Next:
 
-1. Add provider-agnostic reply detection
+1. Finish Slack approval endpoint and UI wiring
 2. Improve HubSpot webhook ingestion for real payload variants
-3. Deploy to Railway and verify live health/webhook routes
-4. Add scheduled Railway job for `sync-all`
-5. Verify the Apps Script webhook updates the existing Google Sheet cleanly
+3. Verify Gmail sending path with real OAuth credentials
+4. Verify Slack notifications fire for new email submissions and demo bookings
+5. Add scheduled Railway job for `sync-all`
 6. Decide whether to keep SQLite on a Railway volume or move to Postgres/Supabase later
 
 ## Important design decisions
 
 - HubSpot remains the CRM of record and attribution source.
 - Automation logic lives outside HubSpot.
-- Outbound email uses Resend so Railway-managed secrets match the pattern used by other agents.
+- Outbound email should use Gmail for deliverability and warmed-up domain reasons.
+- Slack is the approval gate; no lead-triggered email should send automatically without explicit approval.
 - MailSuite is supplemental analytics, not the system of record.
 - Granola is polled rather than webhook-driven.
 - Lead attribution data should be stored both in normalized fields and raw HubSpot snapshot form.
@@ -126,17 +138,21 @@ Use this same pattern next time we build a new internal agent unless there is a 
 
 ### Email-sending workflow
 
-1. Prefer Resend with Railway-managed env vars over direct Gmail API sending for new agents.
+1. Prefer Gmail with Slack approval gating when the workflow is founder-led or warmed-domain reputation matters.
 2. Standard env vars:
-   - `EMAIL_PROVIDER=resend`
+   - `EMAIL_PROVIDER=gmail`
    - `EMAIL_FROM_NAME`
    - `EMAIL_FROM_EMAIL`
-   - `RESEND_API_KEY`
-   - `RESEND_FROM_EMAIL`
-   - `RESEND_REPLY_TO_EMAIL`
+   - `GMAIL_ACCESS_TOKEN`
+   - `GMAIL_REFRESH_TOKEN`
+   - `GMAIL_CLIENT_ID`
+   - `GMAIL_CLIENT_SECRET`
+   - `GMAIL_REPLY_TO_EMAIL`
+   - `GMAIL_USER_ID`
+   - `SLACK_WEBHOOK_URL`
 3. Track outbound events in the app’s own database even if inbox-side tools exist.
 4. Keep tracking links and open pixels owned by the app so analytics are portable.
-5. Default new agents to a test-safe mode where automatic sending can be disabled independently from manual sends.
+5. Default new agents to a test-safe mode where automatic sending can be disabled independently from approval-driven sends.
 
 ### Service shape
 

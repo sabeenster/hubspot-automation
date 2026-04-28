@@ -13,20 +13,29 @@ class HubSpotClient:
     def __init__(self, access_token: str):
         self.access_token = access_token
 
-    def fetch_recent_contacts(self, limit: int = 100) -> List[dict]:
+    def _request(self, path: str, query: str = "") -> dict:
         if not self.access_token:
-            return []
-        query = urlencode({"limit": limit, "properties": ",".join(HUBSPOT_CONTACT_PROPERTIES)})
+            return {}
         request = Request(
-            "https://api.hubapi.com/crm/v3/objects/contacts?" + query,
+            "https://api.hubapi.com" + path + (("?" + query) if query else ""),
             headers={"Authorization": f"Bearer {self.access_token}"},
         )
         try:
             with urlopen(request, timeout=30) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+                return json.loads(response.read().decode("utf-8"))
         except (HTTPError, URLError):
-            return []
+            return {}
+
+    def fetch_recent_contacts(self, limit: int = 100) -> List[dict]:
+        query = urlencode({"limit": limit, "properties": ",".join(HUBSPOT_CONTACT_PROPERTIES)})
+        payload = self._request("/crm/v3/objects/contacts", query)
         return payload.get("results", [])
+
+    def fetch_contact(self, contact_id: str) -> dict:
+        if not contact_id:
+            return {}
+        query = urlencode({"properties": ",".join(HUBSPOT_CONTACT_PROPERTIES)})
+        return self._request(f"/crm/v3/objects/contacts/{contact_id}", query)
 
     def load_sample_contacts(self, path: str) -> List[dict]:
         return json.loads(Path(path).read_text())

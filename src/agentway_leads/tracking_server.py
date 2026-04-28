@@ -1,13 +1,14 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from urllib.parse import parse_qs, urlencode, urlparse
-from urllib.request import Request
 
 from .admin_ui import render_admin_page
-from .automation import send_confirmation_for_lead
+from .automation import approve_request_and_send, send_confirmation_for_lead
 from .database import Database
-from .email_sender import ResendEmailClient
+from .email_sender import BaseEmailClient
 from .models import utcnow_iso
+from .hubspot import HubSpotClient
+from .slack import SlackNotifier
 from .webhooks import ingest_hubspot_webhook, verify_hubspot_signature
 
 
@@ -22,7 +23,9 @@ class TrackingHandler(BaseHTTPRequestHandler):
     db: Database = None  # type: ignore[assignment]
     base_url: str = ""
     hubspot_webhook_secret: str = ""
-    email_client: ResendEmailClient = None  # type: ignore[assignment]
+    email_client: BaseEmailClient = None  # type: ignore[assignment]
+    hubspot_client: HubSpotClient = None  # type: ignore[assignment]
+    slack_notifier: SlackNotifier = None  # type: ignore[assignment]
     admin_token: str = ""
     automatic_email_enabled: bool = False
 
@@ -48,6 +51,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
             page = render_admin_page(
                 self.db.get_leads(),
                 self.db.get_templates(),
+                self.db.get_approval_requests(status="notified") + self.db.get_approval_requests(status="pending"),
                 flash_message=flash_message,
                 admin_token=self.current_admin_token(query),
                 automatic_email_enabled=self.automatic_email_enabled,
@@ -56,6 +60,33 @@ class TrackingHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(page.encode("utf-8"))
+            return
+
+        if parsed.path == "/approve-email":
+            approval_request_id = query.get("approval_request_id", [""])[0]
+            approval_token = query.get("approval_token", [""])[0]
+            try:
+                event = approve_request_and_send(
+                    self.db,
+                    self.email_client,
+                    approval_request_id,
+                    approval_token,
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(
+                    (
+                        f"<html><body><h1>Email sent</h1>"
+                        f"<p>Sent {event.template_name} to {event.email}.</p>"
+                        f"<p><a href=\"/admin?admin_token={self.admin_token}\">Return to admin</a></p>"
+                        f"</body></html>"
+                    ).encode("utf-8")
+                )
+            except ValueError as exc:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(str(exc).encode("utf-8"))
             return
 
         if parsed.path == "/email/open" and event_id:
@@ -90,7 +121,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
                 self.send_response(401)
                 self.end_headers()
                 return
-            ingested = ingest_hubspot_webhook(self.db, body)
+            ingested = ingest_hubspot_webhook(self.db, self.hubspot_client, self.slack_notifier, body)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -138,6 +169,25 @@ class TrackingHandler(BaseHTTPRequestHandler):
                 self.redirect_admin(str(exc), form)
             return
 
+        if parsed.path == "/admin/approve-request":
+            if not self.is_authorized(form):
+                self.send_response(403)
+                self.end_headers()
+                return
+            approval_request_id = form.get("approval_request_id", [""])[0]
+            approval_token = form.get("approval_token", [""])[0]
+            try:
+                event = approve_request_and_send(
+                    self.db,
+                    self.email_client,
+                    approval_request_id,
+                    approval_token,
+                )
+                self.redirect_admin(f"Approval sent: {event.template_name}", form)
+            except ValueError as exc:
+                self.redirect_admin(str(exc), form)
+            return
+
         self.send_response(404)
         self.end_headers()
 
@@ -163,7 +213,9 @@ def serve_tracking(
     db: Database,
     base_url: str,
     hubspot_webhook_secret: str,
-    email_client: ResendEmailClient,
+    email_client: BaseEmailClient,
+    hubspot_client: HubSpotClient,
+    slack_notifier: SlackNotifier,
     admin_token: str = "",
     automatic_email_enabled: bool = False,
     host: str = "0.0.0.0",
@@ -177,6 +229,8 @@ def serve_tracking(
             "base_url": base_url,
             "hubspot_webhook_secret": hubspot_webhook_secret,
             "email_client": email_client,
+            "hubspot_client": hubspot_client,
+            "slack_notifier": slack_notifier,
             "admin_token": admin_token,
             "automatic_email_enabled": automatic_email_enabled,
         },

@@ -2,7 +2,7 @@ import sqlite3
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-from .models import EmailEvent, Lead, MeetingNote, Template
+from .models import ApprovalRequest, EmailEvent, Lead, MeetingNote, Template
 
 
 SCHEMA = """
@@ -80,6 +80,23 @@ CREATE TABLE IF NOT EXISTS templates (
     active INTEGER DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS approval_requests (
+    approval_request_id TEXT PRIMARY KEY,
+    lead_id TEXT NOT NULL,
+    template_name TEXT NOT NULL,
+    approval_token TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reason TEXT NOT NULL,
+    context_json TEXT NOT NULL DEFAULT '{}',
+    requested_at TEXT NOT NULL,
+    notified_at TEXT,
+    approved_at TEXT,
+    sent_at TEXT,
+    failed_at TEXT,
+    failure_reason TEXT,
+    UNIQUE(lead_id, template_name)
+);
+
 CREATE TABLE IF NOT EXISTS meeting_notes (
     meeting_note_id TEXT PRIMARY KEY,
     lead_id TEXT NOT NULL,
@@ -117,6 +134,14 @@ TEMPLATE_COLUMN_MIGRATIONS = {
     "delay_minutes": "ALTER TABLE templates ADD COLUMN delay_minutes INTEGER DEFAULT 0",
 }
 
+APPROVAL_REQUEST_COLUMN_MIGRATIONS = {
+    "notified_at": "ALTER TABLE approval_requests ADD COLUMN notified_at TEXT",
+    "approved_at": "ALTER TABLE approval_requests ADD COLUMN approved_at TEXT",
+    "sent_at": "ALTER TABLE approval_requests ADD COLUMN sent_at TEXT",
+    "failed_at": "ALTER TABLE approval_requests ADD COLUMN failed_at TEXT",
+    "failure_reason": "ALTER TABLE approval_requests ADD COLUMN failure_reason TEXT",
+}
+
 
 class Database:
     def __init__(self, path: str):
@@ -134,6 +159,7 @@ class Database:
             self._migrate_leads_table(conn)
             self._migrate_email_events_table(conn)
             self._migrate_templates_table(conn)
+            self._migrate_approval_requests_table(conn)
 
     def _migrate_leads_table(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(leads)").fetchall()
@@ -170,6 +196,20 @@ class Database:
             for row in rows
         }
         for column_name, sql in TEMPLATE_COLUMN_MIGRATIONS.items():
+            if column_name not in existing_columns:
+                try:
+                    conn.execute(sql)
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column name" not in str(exc).lower():
+                        raise
+
+    def _migrate_approval_requests_table(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("PRAGMA table_info(approval_requests)").fetchall()
+        existing_columns = {
+            row["name"] if isinstance(row, sqlite3.Row) else row[1]
+            for row in rows
+        }
+        for column_name, sql in APPROVAL_REQUEST_COLUMN_MIGRATIONS.items():
             if column_name not in existing_columns:
                 try:
                     conn.execute(sql)
@@ -315,6 +355,62 @@ class Database:
                 "SELECT * FROM email_events ORDER BY sent_at DESC"
             ).fetchall()
         return [EmailEvent(**dict(row)) for row in rows]
+
+    def get_approval_requests(self, status: str = "") -> List[ApprovalRequest]:
+        with self.connect() as conn:
+            if status:
+                rows = conn.execute(
+                    "SELECT * FROM approval_requests WHERE status = ? ORDER BY requested_at DESC",
+                    (status,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM approval_requests ORDER BY requested_at DESC"
+                ).fetchall()
+        return [ApprovalRequest(**dict(row)) for row in rows]
+
+    def get_approval_request(self, approval_request_id: str) -> Optional[ApprovalRequest]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM approval_requests WHERE approval_request_id = ?",
+                (approval_request_id,),
+            ).fetchone()
+        return ApprovalRequest(**dict(row)) if row else None
+
+    def get_approval_request_for_lead_template(
+        self, lead_id: str, template_name: str
+    ) -> Optional[ApprovalRequest]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM approval_requests WHERE lead_id = ? AND template_name = ?",
+                (lead_id, template_name),
+            ).fetchone()
+        return ApprovalRequest(**dict(row)) if row else None
+
+    def upsert_approval_request(self, request: ApprovalRequest) -> None:
+        values = request.__dict__
+        columns = ", ".join(values.keys())
+        placeholders = ", ".join("?" for _ in values)
+        update_clause = ", ".join(
+            f"{column}=excluded.{column}" for column in values if column not in {"approval_request_id", "lead_id", "template_name"}
+        )
+        sql = (
+            f"INSERT INTO approval_requests ({columns}) VALUES ({placeholders}) "
+            f"ON CONFLICT(lead_id, template_name) DO UPDATE SET {update_clause}"
+        )
+        with self.connect() as conn:
+            conn.execute(sql, tuple(values.values()))
+
+    def update_approval_request_fields(self, approval_request_id: str, **fields: object) -> None:
+        if not fields:
+            return
+        assignments = ", ".join(f"{name} = ?" for name in fields)
+        params = list(fields.values()) + [approval_request_id]
+        with self.connect() as conn:
+            conn.execute(
+                f"UPDATE approval_requests SET {assignments} WHERE approval_request_id = ?",
+                params,
+            )
 
     def get_lead_by_email(self, email: str) -> Optional[Lead]:
         with self.connect() as conn:

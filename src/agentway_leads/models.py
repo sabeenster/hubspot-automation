@@ -68,7 +68,7 @@ class EmailEvent:
     template_name: str
     subject: str
     sent_at: str
-    email_provider: str = "resend"
+    email_provider: str = "gmail"
     provider_message_id: str = ""
     gmail_message_id: str = ""
     gmail_thread_id: str = ""
@@ -78,6 +78,23 @@ class EmailEvent:
     clicked_url: str = ""
     bounced: int = 0
     unsubscribe_clicked: int = 0
+
+
+@dataclass
+class ApprovalRequest:
+    approval_request_id: str
+    lead_id: str
+    template_name: str
+    approval_token: str
+    status: str
+    reason: str
+    context_json: str
+    requested_at: str
+    notified_at: str = ""
+    approved_at: str = ""
+    sent_at: str = ""
+    failed_at: str = ""
+    failure_reason: str = ""
 
 
 @dataclass
