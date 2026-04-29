@@ -1,0 +1,4 @@
+version: 1
+display_name: HubSpot Lead Automation
+short_description: Operate the Agentway HubSpot lead workflow on Railway, Sheets, and HubSpot.
+default_prompt: Run and maintain the Agentway HubSpot lead automation workflow on Railway, including HubSpot sync, Slack approval notifications, Gmail send approval flow, Apps Script sheet sync, admin UI checks, and persistent datastore setup.

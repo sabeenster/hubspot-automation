@@ -101,6 +101,9 @@ Next:
   - `https://drive.google.com/drive/folders/1OZexKXpIAr4dtT1cX1axHqr7Fa5D6Drc`
 - The current sheet used by the workflow is:
   - `https://docs.google.com/spreadsheets/d/1491aWSiFvUIKD43kob7whVljOEDksyOkVXXiBME-g8M/edit?usp=sharing`
+- A repo-backed copy of the reusable skill now lives at:
+  - `skills/hubspot-lead-automation/SKILL.md`
+  - `skills/hubspot-lead-automation/agents/openai.yaml`
 
 ## Reusable Pattern For Future Agents
 

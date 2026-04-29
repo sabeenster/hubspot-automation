@@ -216,6 +216,15 @@ That attached-sheet Apps Script path is now the preferred setup for this project
 
 The older `GOOGLE_SERVICE_ACCOUNT_JSON` route still works as a fallback, but it is no longer the recommended first step.
 
+## Portable skill
+
+This project now includes a repo-backed copy of the reusable Codex skill at:
+
+- [skills/hubspot-lead-automation/SKILL.md](/Users/sabeen/Documents/Codex/2026-04-26/yes-i-think-you-can-and/skills/hubspot-lead-automation/SKILL.md)
+- [skills/hubspot-lead-automation/agents/openai.yaml](/Users/sabeen/Documents/Codex/2026-04-26/yes-i-think-you-can-and/skills/hubspot-lead-automation/agents/openai.yaml)
+
+That makes the workflow portable beyond the local installed copy in `~/.codex/skills`.
+
 ## Operator UI
 
 The app also exposes a lightweight admin console:
