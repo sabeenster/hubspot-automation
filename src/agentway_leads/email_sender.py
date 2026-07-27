@@ -14,7 +14,7 @@ URL_RE = re.compile(r"(https?://[^\s]+)")
 
 
 class BaseEmailClient:
-    def create_draft(
+    def send_email(
         self,
         to_email: str,
         subject: str,
@@ -36,7 +36,6 @@ class GmailEmailClient(BaseEmailClient):
         from_email: str,
         tracking_base_url: str,
         reply_to_email: str = "",
-        bcc_email: str = "",
         refresh_token: str = "",
         client_id: str = "",
         client_secret: str = "",
@@ -47,13 +46,12 @@ class GmailEmailClient(BaseEmailClient):
         self.from_email = from_email
         self.tracking_base_url = tracking_base_url.rstrip("/")
         self.reply_to_email = reply_to_email
-        self.bcc_email = bcc_email
         self.refresh_token = refresh_token
         self.client_id = client_id
         self.client_secret = client_secret
         self.user_id = user_id
 
-    def create_draft(
+    def send_email(
         self,
         to_email: str,
         subject: str,
@@ -61,18 +59,13 @@ class GmailEmailClient(BaseEmailClient):
         event_id: str,
         dry_run: bool = False,
     ) -> Dict[str, str]:
-        if dry_run:
+        token = self._access_token()
+        if dry_run or not token:
             return {
                 "id": f"dryrun-{uuid.uuid4()}",
                 "threadId": f"dryrun-thread-{uuid.uuid4()}",
-                "provider": "gmail_draft",
+                "provider": "gmail",
             }
-        token = self._access_token()
-        if not token:
-            raise RuntimeError(
-                "Gmail draft credentials are not configured. "
-                "Set a Gmail access token or refresh-token OAuth credentials."
-            )
 
         message = EmailMessage()
         message["To"] = to_email
@@ -80,18 +73,16 @@ class GmailEmailClient(BaseEmailClient):
         message["Subject"] = subject
         if self.reply_to_email:
             message["Reply-To"] = self.reply_to_email
-        if self.bcc_email:
-            message["Bcc"] = self.bcc_email
         message.set_content(body)
         message.add_alternative(
             render_html_email(body, self.tracking_base_url, event_id),
             subtype="html",
         )
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("utf-8")
-        payload = {"raw": raw, "labelIds": ["DRAFT"]}
+        payload = {"raw": raw}
 
         request = Request(
-            f"https://gmail.googleapis.com/gmail/v1/users/{quote(self.user_id)}/messages",
+            f"https://gmail.googleapis.com/gmail/v1/users/{quote(self.user_id)}/messages/send",
             data=json.dumps(payload).encode("utf-8"),
             headers={
                 "Authorization": f"Bearer {token}",
@@ -105,10 +96,10 @@ class GmailEmailClient(BaseEmailClient):
                 return {
                     "id": data.get("id", ""),
                     "threadId": data.get("threadId", ""),
-                    "provider": "gmail_draft",
+                    "provider": "gmail",
                 }
         except (HTTPError, URLError) as exc:
-            raise RuntimeError(f"Gmail draft creation failed: {exc}") from exc
+            raise RuntimeError(f"Gmail send failed: {exc}") from exc
 
     def _access_token(self) -> str:
         if self.access_token:
@@ -137,12 +128,78 @@ class GmailEmailClient(BaseEmailClient):
             raise RuntimeError(f"Gmail token refresh failed: {exc}") from exc
 
 
+class ResendEmailClient(BaseEmailClient):
+    def __init__(
+        self,
+        api_key: str,
+        from_name: str,
+        from_email: str,
+        tracking_base_url: str,
+        reply_to_email: str = "",
+    ):
+        self.api_key = api_key
+        self.from_name = from_name
+        self.from_email = from_email
+        self.tracking_base_url = tracking_base_url.rstrip("/")
+        self.reply_to_email = reply_to_email
+
+    def send_email(
+        self,
+        to_email: str,
+        subject: str,
+        body: str,
+        event_id: str,
+        dry_run: bool = False,
+    ) -> Dict[str, str]:
+        if dry_run or not self.api_key:
+            return {
+                "id": f"dryrun-{uuid.uuid4()}",
+                "provider": "resend",
+            }
+
+        payload = {
+            "from": f"{self.from_name} <{self.from_email}>",
+            "to": [to_email],
+            "subject": subject,
+            "text": body,
+            "html": render_html_email(body, self.tracking_base_url, event_id),
+            "tags": [
+                {"name": "event_id", "value": event_id},
+                {"name": "source", "value": "agentway"},
+            ],
+        }
+        if self.reply_to_email:
+            payload["reply_to"] = self.reply_to_email
+
+        request = Request(
+            "https://api.resend.com/emails",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=30) as response:
+                data = json.loads(response.read().decode("utf-8"))
+                return {
+                    "id": data.get("id", ""),
+                    "provider": "resend",
+                }
+        except (HTTPError, URLError) as exc:
+            raise RuntimeError(f"Resend send failed: {exc}") from exc
+
+
 def build_email_client(settings) -> BaseEmailClient:
     provider = (settings.email_provider or "gmail").lower()
-    if provider != "gmail":
-        raise RuntimeError(
-            "Draft-only mode requires EMAIL_PROVIDER=gmail. "
-            "Sending providers are intentionally disabled in phase one."
+    if provider == "resend":
+        return ResendEmailClient(
+            api_key=settings.resend_api_key,
+            from_name=settings.email_from_name,
+            from_email=settings.resend_from_email or settings.email_from_email,
+            tracking_base_url=settings.tracking_base_url,
+            reply_to_email=settings.resend_reply_to_email,
         )
     return GmailEmailClient(
         access_token=settings.gmail_access_token,
@@ -150,7 +207,6 @@ def build_email_client(settings) -> BaseEmailClient:
         from_email=settings.email_from_email,
         tracking_base_url=settings.tracking_base_url,
         reply_to_email=settings.gmail_reply_to_email,
-        bcc_email=settings.hubspot_bcc_email,
         refresh_token=settings.gmail_refresh_token,
         client_id=settings.gmail_client_id,
         client_secret=settings.gmail_client_secret,

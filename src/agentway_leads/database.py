@@ -32,7 +32,6 @@ CREATE TABLE IF NOT EXISTS leads (
     lead_type TEXT,
     status TEXT,
     lifecycle_stage TEXT,
-    last_email_drafted TEXT,
     last_email_sent TEXT,
     next_action_date TEXT,
     demo_booked_date TEXT,
@@ -44,9 +43,6 @@ CREATE TABLE IF NOT EXISTS leads (
     confirmation_email_sent INTEGER DEFAULT 0,
     demo_confirmation_sent INTEGER DEFAULT 0,
     post_demo_followup_sent INTEGER DEFAULT 0,
-    confirmation_email_drafted INTEGER DEFAULT 0,
-    demo_confirmation_drafted INTEGER DEFAULT 0,
-    post_demo_followup_drafted INTEGER DEFAULT 0,
     email_opt_in INTEGER DEFAULT 1,
     unsubscribed INTEGER DEFAULT 0,
     workflow_area TEXT,
@@ -61,8 +57,7 @@ CREATE TABLE IF NOT EXISTS email_events (
     email TEXT NOT NULL,
     template_name TEXT NOT NULL,
     subject TEXT NOT NULL,
-    draft_created_at TEXT,
-    sent_at TEXT,
+    sent_at TEXT NOT NULL,
     email_provider TEXT,
     provider_message_id TEXT,
     gmail_message_id TEXT,
@@ -95,7 +90,6 @@ CREATE TABLE IF NOT EXISTS approval_requests (
     context_json TEXT NOT NULL DEFAULT '{}',
     requested_at TEXT NOT NULL,
     notified_at TEXT,
-    draft_created_at TEXT,
     approved_at TEXT,
     sent_at TEXT,
     failed_at TEXT,
@@ -129,16 +123,11 @@ LEAD_COLUMN_MIGRATIONS = {
     "last_meeting_at": "ALTER TABLE leads ADD COLUMN last_meeting_at TEXT",
     "granola_note_url": "ALTER TABLE leads ADD COLUMN granola_note_url TEXT",
     "granola_note_summary": "ALTER TABLE leads ADD COLUMN granola_note_summary TEXT",
-    "last_email_drafted": "ALTER TABLE leads ADD COLUMN last_email_drafted TEXT",
-    "confirmation_email_drafted": "ALTER TABLE leads ADD COLUMN confirmation_email_drafted INTEGER DEFAULT 0",
-    "demo_confirmation_drafted": "ALTER TABLE leads ADD COLUMN demo_confirmation_drafted INTEGER DEFAULT 0",
-    "post_demo_followup_drafted": "ALTER TABLE leads ADD COLUMN post_demo_followup_drafted INTEGER DEFAULT 0",
 }
 
 EMAIL_EVENT_COLUMN_MIGRATIONS = {
     "email_provider": "ALTER TABLE email_events ADD COLUMN email_provider TEXT",
     "provider_message_id": "ALTER TABLE email_events ADD COLUMN provider_message_id TEXT",
-    "draft_created_at": "ALTER TABLE email_events ADD COLUMN draft_created_at TEXT",
 }
 
 TEMPLATE_COLUMN_MIGRATIONS = {
@@ -147,35 +136,10 @@ TEMPLATE_COLUMN_MIGRATIONS = {
 
 APPROVAL_REQUEST_COLUMN_MIGRATIONS = {
     "notified_at": "ALTER TABLE approval_requests ADD COLUMN notified_at TEXT",
-    "draft_created_at": "ALTER TABLE approval_requests ADD COLUMN draft_created_at TEXT",
     "approved_at": "ALTER TABLE approval_requests ADD COLUMN approved_at TEXT",
     "sent_at": "ALTER TABLE approval_requests ADD COLUMN sent_at TEXT",
     "failed_at": "ALTER TABLE approval_requests ADD COLUMN failed_at TEXT",
     "failure_reason": "ALTER TABLE approval_requests ADD COLUMN failure_reason TEXT",
-}
-
-PRESERVED_LEAD_COLUMNS = {
-    "created_at",
-    "last_email_drafted",
-    "last_email_sent",
-    "next_action_date",
-    "demo_completed",
-    "notes",
-    "owner",
-    "lead_quality",
-    "next_step",
-    "confirmation_email_sent",
-    "demo_confirmation_sent",
-    "post_demo_followup_sent",
-    "confirmation_email_drafted",
-    "demo_confirmation_drafted",
-    "post_demo_followup_drafted",
-    "email_opt_in",
-    "unsubscribed",
-    "workflow_area",
-    "last_meeting_at",
-    "granola_note_url",
-    "granola_note_summary",
 }
 
 
@@ -257,24 +221,9 @@ class Database:
         values = lead.__dict__
         columns = ", ".join(values.keys())
         placeholders = ", ".join("?" for _ in values)
-        update_assignments = []
-        for column in values:
-            if column in PRESERVED_LEAD_COLUMNS:
-                continue
-            if column == "status":
-                update_assignments.append(
-                    """
-                    status=CASE
-                        WHEN excluded.lead_type = 'demo_request'
-                             AND leads.status IN ('new', 'nurture')
-                        THEN 'demo_booked'
-                        ELSE leads.status
-                    END
-                    """.strip()
-                )
-                continue
-            update_assignments.append(f"{column}=excluded.{column}")
-        update_clause = ", ".join(update_assignments)
+        update_clause = ", ".join(
+            f"{column}=excluded.{column}" for column in values
+        )
         sql = (
             f"INSERT INTO leads ({columns}) VALUES ({placeholders}) "
             f"ON CONFLICT(email) DO UPDATE SET {update_clause}"
@@ -336,8 +285,6 @@ class Database:
             "gmail_thread_id",
             "email_provider",
             "provider_message_id",
-            "draft_created_at",
-            "sent_at",
             "unsubscribe_clicked",
             "bounced",
         }:
@@ -405,7 +352,7 @@ class Database:
     def get_email_events(self) -> List[EmailEvent]:
         with self.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM email_events ORDER BY COALESCE(draft_created_at, sent_at) DESC"
+                "SELECT * FROM email_events ORDER BY sent_at DESC"
             ).fetchall()
         return [EmailEvent(**dict(row)) for row in rows]
 

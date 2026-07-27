@@ -3,7 +3,7 @@ import json
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from .admin_ui import render_admin_page
-from .automation import create_draft_for_lead, create_request_draft
+from .automation import approve_request_and_send, send_confirmation_for_lead
 from .database import Database
 from .email_sender import BaseEmailClient
 from .models import utcnow_iso
@@ -27,7 +27,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
     hubspot_client: HubSpotClient = None  # type: ignore[assignment]
     slack_notifier: SlackNotifier = None  # type: ignore[assignment]
     admin_token: str = ""
-    automatic_draft_enabled: bool = False
+    automatic_email_enabled: bool = False
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -54,12 +54,39 @@ class TrackingHandler(BaseHTTPRequestHandler):
                 self.db.get_approval_requests(status="notified") + self.db.get_approval_requests(status="pending"),
                 flash_message=flash_message,
                 admin_token=self.current_admin_token(query),
-                automatic_draft_enabled=self.automatic_draft_enabled,
+                automatic_email_enabled=self.automatic_email_enabled,
             )
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(page.encode("utf-8"))
+            return
+
+        if parsed.path == "/approve-email":
+            approval_request_id = query.get("approval_request_id", [""])[0]
+            approval_token = query.get("approval_token", [""])[0]
+            try:
+                event = approve_request_and_send(
+                    self.db,
+                    self.email_client,
+                    approval_request_id,
+                    approval_token,
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(
+                    (
+                        f"<html><body><h1>Email sent</h1>"
+                        f"<p>Sent {event.template_name} to {event.email}.</p>"
+                        f"<p><a href=\"/admin?admin_token={self.admin_token}\">Return to admin</a></p>"
+                        f"</body></html>"
+                    ).encode("utf-8")
+                )
+            except ValueError as exc:
+                self.send_response(400)
+                self.end_headers()
+                self.wfile.write(str(exc).encode("utf-8"))
             return
 
         if parsed.path == "/email/open" and event_id:
@@ -89,30 +116,12 @@ class TrackingHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(length)
 
         if parsed.path == "/webhooks/hubspot":
-            signature = self.headers.get("X-HubSpot-Signature", "")
-            signature_v3 = self.headers.get("X-HubSpot-Signature-v3", "")
-            timestamp = self.headers.get("X-HubSpot-Request-Timestamp", "")
-            request_uri = f"{self.base_url.rstrip('/')}{self.path}"
-            if not verify_hubspot_signature(
-                body,
-                self.hubspot_webhook_secret,
-                signature=signature,
-                signature_v3=signature_v3,
-                timestamp=timestamp,
-                method="POST",
-                uri=request_uri,
-            ):
+            signature = self.headers.get("X-HubSpot-Signature-256", "")
+            if not verify_hubspot_signature(body, signature, self.hubspot_webhook_secret):
                 self.send_response(401)
                 self.end_headers()
                 return
-            ingested = ingest_hubspot_webhook(
-                self.db,
-                self.hubspot_client,
-                self.slack_notifier,
-                self.email_client,
-                self.automatic_draft_enabled,
-                body,
-            )
+            ingested = ingest_hubspot_webhook(self.db, self.hubspot_client, self.slack_notifier, body)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
@@ -141,7 +150,7 @@ class TrackingHandler(BaseHTTPRequestHandler):
             self.redirect_admin("Template updated", form)
             return
 
-        if parsed.path == "/admin/create-draft":
+        if parsed.path == "/admin/send-confirmation":
             if not self.is_authorized(form):
                 self.send_response(403)
                 self.end_headers()
@@ -149,18 +158,18 @@ class TrackingHandler(BaseHTTPRequestHandler):
             lead_id = form.get("lead_id", [""])[0]
             template_name = form.get("template_name", [""])[0]
             try:
-                event = create_draft_for_lead(
+                event = send_confirmation_for_lead(
                     self.db,
                     self.email_client,
                     lead_id,
                     template_name=template_name,
                 )
-                self.redirect_admin(f"Gmail draft created: {event.template_name}", form)
+                self.redirect_admin(f"Confirmation sent: {event.template_name}", form)
             except ValueError as exc:
                 self.redirect_admin(str(exc), form)
             return
 
-        if parsed.path == "/admin/create-request-draft":
+        if parsed.path == "/admin/approve-request":
             if not self.is_authorized(form):
                 self.send_response(403)
                 self.end_headers()
@@ -168,14 +177,13 @@ class TrackingHandler(BaseHTTPRequestHandler):
             approval_request_id = form.get("approval_request_id", [""])[0]
             approval_token = form.get("approval_token", [""])[0]
             try:
-                event = create_request_draft(
+                event = approve_request_and_send(
                     self.db,
                     self.email_client,
                     approval_request_id,
                     approval_token,
-                    self.slack_notifier,
                 )
-                self.redirect_admin(f"Gmail draft created: {event.template_name}", form)
+                self.redirect_admin(f"Approval sent: {event.template_name}", form)
             except ValueError as exc:
                 self.redirect_admin(str(exc), form)
             return
@@ -209,7 +217,7 @@ def serve_tracking(
     hubspot_client: HubSpotClient,
     slack_notifier: SlackNotifier,
     admin_token: str = "",
-    automatic_draft_enabled: bool = False,
+    automatic_email_enabled: bool = False,
     host: str = "0.0.0.0",
     port: int = 8080,
 ) -> None:
@@ -224,7 +232,7 @@ def serve_tracking(
             "hubspot_client": hubspot_client,
             "slack_notifier": slack_notifier,
             "admin_token": admin_token,
-            "automatic_draft_enabled": automatic_draft_enabled,
+            "automatic_email_enabled": automatic_email_enabled,
         },
     )
     server = HTTPServer((host, port), handler)

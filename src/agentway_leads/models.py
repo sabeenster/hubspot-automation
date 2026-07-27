@@ -30,7 +30,6 @@ class Lead:
     lead_type: str = "manual_add"
     status: str = "new"
     lifecycle_stage: str = ""
-    last_email_drafted: str = ""
     last_email_sent: str = ""
     next_action_date: str = ""
     demo_booked_date: str = ""
@@ -42,9 +41,6 @@ class Lead:
     confirmation_email_sent: int = 0
     demo_confirmation_sent: int = 0
     post_demo_followup_sent: int = 0
-    confirmation_email_drafted: int = 0
-    demo_confirmation_drafted: int = 0
-    post_demo_followup_drafted: int = 0
     email_opt_in: int = 1
     unsubscribed: int = 0
     workflow_area: str = "your current workflow"
@@ -71,8 +67,7 @@ class EmailEvent:
     email: str
     template_name: str
     subject: str
-    draft_created_at: str = ""
-    sent_at: str = ""
+    sent_at: str
     email_provider: str = "gmail"
     provider_message_id: str = ""
     gmail_message_id: str = ""
@@ -96,7 +91,6 @@ class ApprovalRequest:
     context_json: str
     requested_at: str
     notified_at: str = ""
-    draft_created_at: str = ""
     approved_at: str = ""
     sent_at: str = ""
     failed_at: str = ""

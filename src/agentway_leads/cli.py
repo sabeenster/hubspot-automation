@@ -2,7 +2,7 @@ import argparse
 import json
 from pathlib import Path
 
-from .automation import create_due_drafts, determine_automations, queue_approval_requests
+from .automation import determine_automations, queue_approval_requests
 from .config import get_settings
 from .database import Database
 from .email_sender import build_email_client
@@ -24,7 +24,6 @@ def build_parser() -> argparse.ArgumentParser:
     sync_parser = subparsers.add_parser("sync-hubspot")
     sync_parser.add_argument("--sample-data", help="Path to sample HubSpot JSON")
     sync_parser.add_argument("--limit", type=int, default=100)
-    sync_parser.add_argument("--dry-run", action="store_true")
 
     granola_parser = subparsers.add_parser("sync-granola")
     granola_parser.add_argument("--sample-data", help="Path to sample Granola JSON")
@@ -82,35 +81,23 @@ def main() -> None:
         for lead in leads:
             db.upsert_lead(lead)
         decisions = determine_automations(db.get_leads())
-        queued = queue_approval_requests(db, decisions)
-        drafted = []
-        if settings.automatic_draft_enabled or args.dry_run:
-            drafted = create_due_drafts(
-                db,
-                build_email_client(settings),
-                SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
-                dry_run=args.dry_run,
-            )
-        print(
-            f"Synced {len(leads)} leads, queued {len(queued)} draft requests, "
-            f"and created {len(drafted)} drafts"
+        queued = queue_approval_requests(
+            db,
+            decisions,
+            SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
         )
+        print(f"Synced {len(leads)} leads and queued {len(queued)} approval requests")
         return
 
     if args.command == "run-automations":
         db.init_db()
         decisions = determine_automations(db.get_leads())
-        queued = queue_approval_requests(db, decisions)
-        drafted = create_due_drafts(
+        queued = queue_approval_requests(
             db,
-            build_email_client(settings),
+            decisions,
             SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
-            dry_run=args.dry_run,
         )
-        print(
-            f"Evaluated {len(decisions)} automations, queued {len(queued)} draft requests, "
-            f"and created {len(drafted)} drafts"
-        )
+        print(f"Evaluated {len(decisions)} automations and queued {len(queued)} approval requests")
         return
 
     if args.command == "sync-all":
@@ -139,15 +126,11 @@ def main() -> None:
         linked = sync_granola_notes(db, notes)
 
         decisions = determine_automations(db.get_leads())
-        queued = queue_approval_requests(db, decisions)
-        drafted = []
-        if settings.automatic_draft_enabled or args.dry_run:
-            drafted = create_due_drafts(
-                db,
-                build_email_client(settings),
-                SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
-                dry_run=args.dry_run,
-            )
+        queued = queue_approval_requests(
+            db,
+            decisions,
+            SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
+        )
 
         if not args.skip_sheets:
             sync = GoogleSheetsSync(
@@ -161,8 +144,7 @@ def main() -> None:
 
         print(
             "Sync complete: "
-            f"{len(leads)} leads, {linked} meeting notes, {len(decisions)} automations, "
-            f"{len(queued)} draft requests queued, {len(drafted)} drafts created"
+            f"{len(leads)} leads, {linked} meeting notes, {len(decisions)} automations, {len(queued)} approvals queued"
         )
         return
 
@@ -183,7 +165,7 @@ def main() -> None:
             HubSpotClient(settings.hubspot_access_token),
             SlackNotifier(settings.slack_webhook_url, settings.base_url, settings.admin_token),
             settings.admin_token,
-            settings.automatic_draft_enabled,
+            settings.automatic_email_enabled,
             host=args.host or settings.host,
             port=args.port or settings.port,
         )

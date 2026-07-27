@@ -11,29 +11,30 @@ class SlackNotifier:
         self.base_url = base_url.rstrip("/")
         self.admin_token = admin_token
 
-    def send_draft_ready(
+    def send_approval_request(
         self,
         approval_request: ApprovalRequest,
         lead: Lead,
         template: Template,
-        gmail_message_id: str = "",
     ) -> bool:
         if not self.webhook_url:
             return False
 
-        gmail_url = "https://mail.google.com/mail/u/0/#drafts"
-        if gmail_message_id:
-            gmail_url += f"/{gmail_message_id}"
+        approve_url = (
+            f"{self.base_url}/approve-email?"
+            f"approval_request_id={approval_request.approval_request_id}"
+            f"&approval_token={approval_request.approval_token}"
+        )
         admin_url = f"{self.base_url}/admin"
         if self.admin_token:
             admin_url += f"?admin_token={self.admin_token}"
         title = f"{lead.first_name or ''} {lead.last_name or ''}".strip() or lead.email
         payload = {
-            "text": f"Gmail draft ready for {lead.email}",
+            "text": f"Approval needed to send {template.template_name} to {lead.email}",
             "blocks": [
                 {
                     "type": "header",
-                    "text": {"type": "plain_text", "text": "Lead follow-up draft ready"},
+                    "text": {"type": "plain_text", "text": "Approval needed: lead email"},
                 },
                 {
                     "type": "section",
@@ -52,9 +53,9 @@ class SlackNotifier:
                     "elements": [
                         {
                             "type": "button",
-                            "text": {"type": "plain_text", "text": "Open Gmail Draft"},
+                            "text": {"type": "plain_text", "text": "Approve + Send"},
                             "style": "primary",
-                            "url": gmail_url,
+                            "url": approve_url,
                         },
                         {
                             "type": "button",
