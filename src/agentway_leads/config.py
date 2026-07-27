@@ -18,6 +18,7 @@ class Settings:
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8080"))
     email_provider: str = os.getenv("EMAIL_PROVIDER", "gmail")
+    draft_provider: str = os.getenv("DRAFT_PROVIDER", "gmail")
     email_from_name: str = os.getenv("EMAIL_FROM_NAME", "Sabeen")
     email_from_email: str = os.getenv("EMAIL_FROM_EMAIL", "sabeen@agentway.com")
     gmail_access_token: str = os.getenv("GMAIL_ACCESS_TOKEN", "")

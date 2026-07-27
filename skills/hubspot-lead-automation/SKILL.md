@@ -46,6 +46,7 @@ BASE_URL=https://hubspot-automation-production.up.railway.app
 TRACKING_BASE_URL=https://hubspot-automation-production.up.railway.app
 DATABASE_PATH=/data/agentway_leads.db
 EMAIL_PROVIDER=gmail
+DRAFT_PROVIDER=gmail
 EMAIL_FROM_NAME=Sabeen
 EMAIL_FROM_EMAIL=sabeen@agentway-ai.com
 GMAIL_REFRESH_TOKEN=
