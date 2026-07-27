@@ -73,20 +73,25 @@ def contact_to_lead(contact: dict) -> Lead:
         lead_type=lead_type,
         status=status,
         lifecycle_stage=props.get("lifecyclestage", ""),
-        demo_booked_date=props.get("demo_booked_date", ""),
+        demo_booked_date=props.get("engagements_last_meeting_booked", ""),
     )
 
 
 def infer_lead_type(properties: dict) -> str:
-    if properties.get("demo_booked_date"):
+    if properties.get("engagements_last_meeting_booked"):
         return "demo_request"
-    form_type = (properties.get("form_type") or "").lower()
-    if "newsletter" in form_type or "email" in form_type:
-        return "newsletter_signup"
-    if "demo" in form_type:
+    conversion_name = (
+        properties.get("recent_conversion_event_name")
+        or properties.get("first_conversion_event_name")
+        or ""
+    ).lower()
+    source_label = (properties.get("hs_object_source_label") or "").lower()
+    if "meeting" in conversion_name or source_label == "meetings":
         return "demo_request"
-    if "contact" in form_type:
+    if "contact" in conversion_name:
         return "contact_form"
+    if conversion_name or source_label == "form":
+        return "newsletter_signup"
     return "newsletter_signup"
 
 
@@ -99,19 +104,19 @@ HUBSPOT_CONTACT_PROPERTIES = [
     "jobtitle",
     "lifecyclestage",
     "hs_lead_status",
-    "form_type",
-    "demo_booked_date",
-    "utm_campaign",
-    "utm_content",
-    "utm_medium",
-    "utm_source",
+    "engagements_last_meeting_booked",
+    "recent_conversion_event_name",
+    "recent_conversion_date",
+    "first_conversion_event_name",
+    "first_conversion_date",
+    "num_conversion_events",
     "hs_analytics_source",
     "hs_analytics_source_data_1",
     "hs_analytics_source_data_2",
     "hs_latest_source",
     "hs_latest_source_data_1",
     "hs_latest_source_data_2",
-    "hs_object_source",
+    "hs_object_source_label",
     "hs_facebook_click_id",
 ]
 
@@ -153,6 +158,14 @@ def extract_attribution(properties: Dict[str, str]) -> Dict[str, str]:
         "hs_latest_source_data_1": properties.get("hs_latest_source_data_1", ""),
         "hs_latest_source_data_2": properties.get("hs_latest_source_data_2", ""),
         "hs_object_source": properties.get("hs_object_source", ""),
+        "hs_object_source_label": properties.get("hs_object_source_label", ""),
+        "recent_conversion_event_name": properties.get("recent_conversion_event_name", ""),
+        "recent_conversion_date": properties.get("recent_conversion_date", ""),
+        "first_conversion_event_name": properties.get("first_conversion_event_name", ""),
+        "first_conversion_date": properties.get("first_conversion_date", ""),
+        "engagements_last_meeting_booked": properties.get(
+            "engagements_last_meeting_booked", ""
+        ),
         "hs_facebook_click_id": properties.get("hs_facebook_click_id", ""),
     }
     return {
