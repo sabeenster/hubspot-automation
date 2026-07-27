@@ -95,6 +95,7 @@ Required mailbox variables:
 
 ```bash
 EMAIL_PROVIDER=gmail
+DRAFT_PROVIDER=gmail
 EMAIL_FROM_NAME=Sabeen
 EMAIL_FROM_EMAIL=sabeen@agentway-ai.com
 GMAIL_REFRESH_TOKEN=
@@ -109,7 +110,9 @@ AUTOMATIC_EMAIL_ENABLED=false
 
 Set `AUTOMATIC_DRAFT_ENABLED=true` only after one manual internal draft has been
 verified in Gmail. `AUTOMATIC_EMAIL_ENABLED` is reserved for a later sending
-phase and is not used by the phase-one code.
+phase and is not used by the phase-one code. `DRAFT_PROVIDER` is separate from
+the existing `EMAIL_PROVIDER`, so a legacy `EMAIL_PROVIDER=resend` setting will
+not prevent the draft service from starting.
 
 ## Railway
 

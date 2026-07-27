@@ -138,10 +138,10 @@ class GmailEmailClient(BaseEmailClient):
 
 
 def build_email_client(settings) -> BaseEmailClient:
-    provider = (settings.email_provider or "gmail").lower()
+    provider = (settings.draft_provider or "gmail").lower()
     if provider != "gmail":
         raise RuntimeError(
-            "Draft-only mode requires EMAIL_PROVIDER=gmail. "
+            "Draft-only mode requires DRAFT_PROVIDER=gmail. "
             "Sending providers are intentionally disabled in phase one."
         )
     return GmailEmailClient(
