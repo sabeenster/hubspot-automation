@@ -2,7 +2,7 @@ from datetime import timedelta
 from html import escape
 from typing import List
 
-from .automation import is_due_to_send, recommended_confirmation_template_name, scheduled_from_timestamp
+from .automation import is_due_to_draft, recommended_confirmation_template_name, scheduled_from_timestamp
 from .models import ApprovalRequest, Lead, Template
 
 
@@ -12,7 +12,7 @@ def render_admin_page(
     approval_requests: List[ApprovalRequest],
     flash_message: str = "",
     admin_token: str = "",
-    automatic_email_enabled: bool = False,
+    automatic_draft_enabled: bool = False,
 ) -> str:
     template_rows = "\n".join(render_template_row(template, admin_token) for template in templates)
     lead_rows = "\n".join(render_lead_row(lead, templates, admin_token) for lead in leads[:50])
@@ -22,8 +22,12 @@ def render_admin_page(
     flash_html = (
         f'<div class="flash">{escape(flash_message)}</div>' if flash_message else ""
     )
-    auto_state = "Automatic sending is ON." if automatic_email_enabled else "Automatic sending is OFF. Manual force-send still works."
-    auto_class = "auto-on" if automatic_email_enabled else "auto-off"
+    auto_state = (
+        "Automatic Gmail draft creation is ON."
+        if automatic_draft_enabled
+        else "Automatic Gmail draft creation is OFF. Manual draft creation is available."
+    )
+    auto_class = "auto-on" if automatic_draft_enabled else "auto-off"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -288,29 +292,29 @@ def render_admin_page(
   <div class="wrap">
     <section class="hero">
       <div class="eyebrow">Agentway Ops Console</div>
-      <h1>Confirm leads on your terms.</h1>
-      <p class="subtitle">Route new lead follow-up through Slack approval, keep templates editable, and only send when you explicitly green-light the message.</p>
+      <h1>Turn new leads into ready-to-review drafts.</h1>
+      <p class="subtitle">Agentway watches HubSpot, prepares personalized Gmail drafts, and leaves the final review and Send click to you.</p>
       <div class="auto-state {auto_class}">{escape(auto_state)}</div>
       {flash_html}
     </section>
     <section class="grid">
       <article class="card">
         <h2>Delay Settings</h2>
-        <p class="card-copy">These template delays control when automation is allowed to send. Update them here so you do not need a code change every time cadence shifts.</p>
+        <p class="card-copy">These template delays control when Agentway creates a Gmail draft. Update them here without a code change.</p>
         <div class="template-stack">
           {template_rows or '<div class="empty">No templates available.</div>'}
         </div>
       </article>
       <article class="card">
-        <h2>Pending Approvals</h2>
-        <p class="card-copy">New email submissions and demo bookings land here first. Approve from Slack or use this queue as your fallback control room.</p>
+        <h2>Pending Draft Requests</h2>
+        <p class="card-copy">New email submissions and demo bookings land here until their Gmail draft has been created.</p>
         <div class="leads">
           {approval_rows or '<div class="empty">No approvals pending right now.</div>'}
         </div>
       </article>
       <article class="card">
-        <h2>Lead Confirmations</h2>
-        <p class="card-copy">Manual fallback if you want to send a template directly without the Slack approval link.</p>
+        <h2>Create a Draft Manually</h2>
+        <p class="card-copy">Choose a lead and template to create an additional Gmail draft for review.</p>
         <div class="leads">
           {lead_rows or '<div class="empty">No leads found yet.</div>'}
         </div>
@@ -364,7 +368,7 @@ def render_approval_row(
     )
     hidden = render_hidden_token(admin_token)
     return f"""
-    <form class="lead-row" method="post" action="/admin/approve-request">
+    <form class="lead-row" method="post" action="/admin/create-request-draft">
       {hidden}
       <input type="hidden" name="approval_request_id" value="{escape(approval_request.approval_request_id)}" />
       <input type="hidden" name="approval_token" value="{escape(approval_request.approval_token)}" />
@@ -386,7 +390,7 @@ def render_approval_row(
           {escape(template.subject if template else '')}
         </div>
         <div style="display:grid;gap:10px;">
-          <button type="submit">Approve + Send</button>
+          <button type="submit">Create Gmail Draft</button>
         </div>
       </div>
     </form>
@@ -403,7 +407,7 @@ def render_lead_row(lead: Lead, templates: List[Template], admin_token: str) -> 
       anchor = scheduled_from_timestamp(lead, template)
       due_at = anchor + timedelta(days=template.delay_days, minutes=template.delay_minutes)
       due_text = due_at.isoformat().replace("+00:00", "Z")
-      due_now = is_due_to_send(lead, template)
+      due_now = is_due_to_draft(lead, template)
       delay_copy = f"{template.delay_days}d {template.delay_minutes}m"
     else:
       due_text = "n/a"
@@ -421,7 +425,7 @@ def render_lead_row(lead: Lead, templates: List[Template], admin_token: str) -> 
         }
     )
     return f"""
-    <form class="lead-row" method="post" action="/admin/send-confirmation">
+    <form class="lead-row" method="post" action="/admin/create-draft">
       {hidden}
       <input type="hidden" name="lead_id" value="{escape(lead.lead_id)}" />
         <div class="lead-top">
@@ -439,13 +443,13 @@ def render_lead_row(lead: Lead, templates: List[Template], admin_token: str) -> 
       </div>
       <div class="actions">
         <div class="hint">
-          Delay window: {escape(delay_copy)}. Due from: {escape(due_text)}. Currently {'eligible to send' if due_now else 'waiting for delay window'}.
+          Delay window: {escape(delay_copy)}. Due from: {escape(due_text)}. Currently {'eligible to draft' if due_now else 'waiting for delay window'}.
         </div>
         <div style="display:grid;gap:10px;">
           <label>Template
             <select name="template_name">{options}</select>
           </label>
-          <button type="submit">Force Send Confirmation</button>
+          <button type="submit">Create Gmail Draft</button>
         </div>
       </div>
     </form>
